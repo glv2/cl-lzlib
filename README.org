@@ -1,0 +1,4 @@
+#+TITLE: cl-lzlib
+
+This is a Common Lisp binding for the lzlib C library (LZMA compression).
+It can be used to compress and decompress data using the lzip archive format.
