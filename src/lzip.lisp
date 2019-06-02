@@ -8,45 +8,29 @@
 
 (defconstant +buffer-size+ 65536)
 
-(defun lzma-options (level dictionary-size match-len-limit)
-  (cond
-    ((and dictionary-size (not match-len-limit))
-     (error "MATCH-LEN-LIMIT is not set."))
-    ((and match-len-limit (not dictionary-size))
-     (error "DICTIONARY-SIZE is not set."))
-    ((and dictionary-size match-len-limit)
-     (assert (<= (lz-min-dictionary-size)
-                 dictionary-size
-                 (lz-max-dictionary-size)))
-     (assert (<= (lz-min-match-len-limit)
-                 match-len-limit
-                 (lz-max-match-len-limit)))
-     (list dictionary-size match-len-limit))
-    (level
-     (ecase level
-       ((0) '(65535 16))
-       ((1) '(1048576 5))
-       ((2) '(1572864 6))
-       ((3) '(2097152 8))
-       ((4) '(3145728 12))
-       ((5) '(4194304 20))
-       ((6) '(8388608 36))
-       ((7) '(16777216 68))
-       ((8) '(25165824 132))
-       ((9) '(33554432 273))))
-    (t
-     (error "Either LEVEL or DICTIONARY-SIZE and MATCH-LEN-LIMIT must be set."))))
+
+(declaim (inline copy-to-ffi-buffer copy-from-ffi-buffer))
 
 (defun copy-to-ffi-buffer (buffer ffi-buffer size)
+  (declare (type (simple-array (unsigned-byte 8) (*)) buffer)
+           (type fixnum size)
+           (optimize (speed 3) (space 0) (debug 0) (safety 1)))
   (dotimes (i size ffi-buffer)
     (setf (cffi:mem-aref ffi-buffer :unsigned-char i) (aref buffer i))))
 
 (defun copy-from-ffi-buffer (ffi-buffer buffer size)
+  (declare (type (simple-array (unsigned-byte 8) (*)) buffer)
+           (type fixnum size)
+           (optimize (speed 3) (space 0) (debug 0) (safety 1)))
   (dotimes (i size buffer)
     (setf (aref buffer i) (cffi:mem-aref ffi-buffer :unsigned-char i))))
 
+
 (defun compress (encoder input output member-size)
+  (declare (optimize (speed 3) (space 0) (debug 0) (safety 1)))
   (let ((buffer (make-array +buffer-size+ :element-type '(unsigned-byte 8))))
+    (declare (type (simple-array (unsigned-byte 8) (*)) buffer)
+             (dynamic-extent buffer))
     (cffi:with-foreign-object (ffi-buffer :unsigned-char +buffer-size+)
       (loop do
         (let ((in-size 0)
@@ -80,6 +64,35 @@
               (let ((msg (lz-strerror (lz-compress-errno encoder))))
                 (error "LZ-COMPRESS-RESTART-MEMBER error: ~a." msg))))))))
   t)
+
+(defun lzma-options (level dictionary-size match-len-limit)
+  (cond
+    ((and dictionary-size (not match-len-limit))
+     (error "MATCH-LEN-LIMIT is not set."))
+    ((and match-len-limit (not dictionary-size))
+     (error "DICTIONARY-SIZE is not set."))
+    ((and dictionary-size match-len-limit)
+     (assert (<= (lz-min-dictionary-size)
+                 dictionary-size
+                 (lz-max-dictionary-size)))
+     (assert (<= (lz-min-match-len-limit)
+                 match-len-limit
+                 (lz-max-match-len-limit)))
+     (list dictionary-size match-len-limit))
+    (level
+     (ecase level
+       ((0) '(65535 16))
+       ((1) '(1048576 5))
+       ((2) '(1572864 6))
+       ((3) '(2097152 8))
+       ((4) '(3145728 12))
+       ((5) '(4194304 20))
+       ((6) '(8388608 36))
+       ((7) '(16777216 68))
+       ((8) '(25165824 132))
+       ((9) '(33554432 273))))
+    (t
+     (error "Either LEVEL or DICTIONARY-SIZE and MATCH-LEN-LIMIT must be set."))))
 
 (defun compress-stream (input output &key (level 6) (member-size 2251799813685248) dictionary-size match-len-limit)
   "Read the data from the INPUT octet stream, compress it, and write the result
@@ -125,8 +138,11 @@ and return the resulting octet vector."
 
 
 (defun decompress (decoder input output ignore-trailing loose-trailing)
+  (declare (optimize (speed 3) (space 0) (debug 0) (safety 1)))
   (let ((first-member t)
         (buffer (make-array +buffer-size+ :element-type '(unsigned-byte 8))))
+    (declare (type (simple-array (unsigned-byte 8) (*)) buffer)
+             (dynamic-extent buffer))
     (cffi:with-foreign-object (ffi-buffer :unsigned-char +buffer-size+)
       (loop do
         (let ((max-in-size (min (lz-decompress-write-size decoder) +buffer-size+))
