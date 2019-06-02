@@ -109,8 +109,90 @@
   ;; TODO
   )
 
+
+(defun decompress (decoder input output ignore-trailing loose-trailing)
+  (let ((first-member t)
+        (buffer (make-array +buffer-size+ :element-type '(unsigned-byte 8))))
+    (cffi:with-foreign-object (ffi-buffer :unsigned-char +buffer-size+)
+      (loop do
+        (let ((max-in-size (min (lz-decompress-write-size decoder) +buffer-size+))
+              (in-size 0)
+              (out-size 0))
+          (when (plusp max-in-size)
+            (setf in-size (read-sequence buffer input max-in-size))
+            (when (plusp in-size)
+              (copy-to-ffi-buffer buffer ffi-buffer in-size)
+              (when (/= (lz-decompress-write decoder ffi-buffer in-size) in-size)
+                (error "Library error (LZ-DECOMPRESS-WRITE).")))
+            (when (< in-size max-in-size)
+              (lz-decompress-finish decoder)))
+
+          (loop do
+            (let ((rd (lz-decompress-read decoder ffi-buffer +buffer-size+)))
+              (cond
+                ((plusp rd)
+                 (copy-from-ffi-buffer ffi-buffer buffer rd)
+                 (write-sequence buffer output :end rd)
+                 (incf out-size rd))
+                ((minusp rd)
+                 (setf out-size rd)
+                 (return)))
+              (when (= (lz-decompress-member-finished decoder) 1)
+                (setf first-member nil))
+              (unless (plusp rd)
+                (return))))
+
+          (when (or (minusp out-size) (and first-member (zerop out-size)))
+            (let ((member-pos (lz-decompress-member-position decoder))
+                  (lz-errno (lz-decompress-errno decoder)))
+              (when (= lz-errno +lz-library-error+)
+                (error "Library error (LZ-DECOMPRESS-READ)."))
+              (when (<= member-pos 6)
+                (cond
+                  ((= lz-errno +lz-unexpected-eof+)
+                   (if first-member
+                       (error "File ends unexpectedly at member header.")
+                       (error "Truncated header in multimember file.")))
+                  ((= lz-errno +lz-data-error+)
+                   (cond
+                     ((= member-pos 4)
+                      (let ((version (lz-decompress-member-version decoder)))
+                        (error "Version ~d member format not supported." version)))
+                     ((= member-pos 5)
+                      (error "Invalid dictionary size in member header."))
+                     (first-member
+                      (error "Bad version or dictionary size in member header."))
+                     ((not loose-trailing)
+                      (error "Corrupt header in multimember file."))
+                     ((not ignore-trailing)
+                      (error "Trailing data not allowed."))
+                     (t
+                      (return))))))
+              (when (= lz-errno +lz-header-error+)
+                (cond
+                  (first-member
+                   (error "Bad magic number (file not in lzip format)."))
+                  ((not ignore-trailing)
+                   (error "Trailing data not allowed."))
+                  (t
+                   (return))))
+              (when (= lz-errno +lz-mem-error+)
+                (error "Not enough memory."))))
+
+          (when (= (lz-decompress-finished decoder) 1)
+            (return))
+          (when (and (zerop in-size) (zerop out-size))
+            (error "Library error (stalled)."))))))
+  t)
+
 (defun decompress-stream (input output &key (ignore-trailing t) loose-trailing)
-  )
+  (let ((decoder (lz-decompress-open)))
+    (unwind-protect
+         (if (or (cffi:null-pointer-p decoder)
+                 (/= (lz-decompress-errno decoder) +lz-ok+))
+             (error "Not enough memory.")
+             (decompress decoder input output ignore-trailing loose-trailing))
+      (lz-decompress-close decoder))))
 
 (defun decompress-file (input output &key (ignore-trailing t) loose-trailing)
   (with-open-file (input-stream input :element-type '(unsigned-byte 8))

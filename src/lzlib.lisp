@@ -17,7 +17,7 @@
 (defconstant +lz-mem-error+ 2)
 (defconstant +lz-sequence-error+ 3)
 (defconstant +lz-header-error+ 4)
-(defconstant +lz-unexpected-eof++ 5)
+(defconstant +lz-unexpected-eof+ 5)
 (defconstant +lz-data-error+ 6)
 (defconstant +lz-library-error+ 7)
 
