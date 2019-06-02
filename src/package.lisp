@@ -5,8 +5,7 @@
 
 (defpackage :lzlib
   (:use :cl)
-  (:export #:+max-member-size+
-           #:compress-stream
+  (:export #:compress-stream
            #:compress-file
            #:compress-buffer
            #:decompress-stream
