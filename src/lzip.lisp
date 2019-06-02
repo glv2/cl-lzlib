@@ -53,8 +53,8 @@
         (let ((in-size 0)
               (out-size 0))
           (loop while (plusp (lz-compress-write-size encoder)) do
-            (let ((size (min (lz-compress-write-size encoder) +buffer-size+))
-                  (rd (read-sequence buffer input :end size)))
+            (let* ((size (min (lz-compress-write-size encoder) +buffer-size+))
+                   (rd (read-sequence buffer input :end size)))
               (when (plusp rd)
                 (copy-to-ffi-buffer buffer ffi-buffer rd)
                 (when (/= (lz-compress-write encoder ffi-buffer rd) rd)
@@ -99,18 +99,20 @@
 
 (defun compress-file (input output &key (level 6) (member-size +max-member-size+) dictionary-size match-len-limit)
   (with-open-file (input-stream input :element-type '(unsigned-byte 8))
-    (with-open-file (output-stream output :element-type '(unsignde-byte 8))
+    (with-open-file (output-stream output :element-type '(unsigned-byte 8))
       (compress-stream input-stream output-stream
                        :level level
+                       :member-size member-size
                        :dictionary-size dictionary-size
                        :match-len-limit match-len-limit))))
 
 (defun compress-buffer (buffer &key (start 0) end (level 6) (member-size +max-member-size+) dictionary-size match-len-limit)
   (let ((end (or end (length buffer))))
     (octet-streams:with-octet-output-stream (output)
-      (octet-streams:with-octet-input-stream (input buffer :start start :end end)
+      (octet-streams:with-octet-input-stream (input buffer start end)
         (compress-stream input output
                          :level level
+                         :member-size member-size
                          :dictionary-size dictionary-size
                          :match-len-limit match-len-limit)))))
 
@@ -124,7 +126,7 @@
               (in-size 0)
               (out-size 0))
           (when (plusp max-in-size)
-            (setf in-size (read-sequence buffer input max-in-size))
+            (setf in-size (read-sequence buffer input :end max-in-size))
             (when (plusp in-size)
               (copy-to-ffi-buffer buffer ffi-buffer in-size)
               (when (/= (lz-decompress-write decoder ffi-buffer in-size) in-size)
@@ -201,7 +203,7 @@
 
 (defun decompress-file (input output &key (ignore-trailing t) loose-trailing)
   (with-open-file (input-stream input :element-type '(unsigned-byte 8))
-    (with-open-file (output-stream output :element-type '(unsignde-byte 8))
+    (with-open-file (output-stream output :element-type '(unsigned-byte 8))
       (decompress-stream input-stream output-stream
                          :ignore-trailing ignore-trailing
                          :loose-trailing loose-trailing))))
@@ -209,7 +211,7 @@
 (defun decompress-buffer (buffer &key (start 0) end (ignore-trailing t) loose-trailing)
   (let ((end (or end (length buffer))))
     (octet-streams:with-octet-output-stream (output)
-      (octet-streams:with-octet-input-stream (input buffer :start start :end end)
+      (octet-streams:with-octet-input-stream (input buffer start end)
         (decompress-stream input output
                            :ignore-trailing ignore-trailing
                            :loose-trailing loose-trailing)))))

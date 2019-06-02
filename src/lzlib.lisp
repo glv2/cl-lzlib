@@ -22,7 +22,7 @@
 (defconstant +lz-library-error+ 7)
 
 (cffi:defcfun ("LZ_version" lz-version) :string)
-(cffi:defcfun ("LZ_strerror" ls-strerror) :string
+(cffi:defcfun ("LZ_strerror" lz-strerror) :string
   (lz-errno :int))
 (cffi:defcfun ("LZ_min_dictionary_bits" lz-min-dictionary-bits) :int)
 (cffi:defcfun ("LZ_min_dictionary_size" lz-min-dictionary-size) :int)
