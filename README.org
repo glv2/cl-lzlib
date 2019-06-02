@@ -51,8 +51,9 @@ The compression can be customized using serveral parameters:
    /member-size/ parameter. The default value is 2 PiB.
  - The compression level can be indicated either using the /level/ parameter, or
    by using both the /dictionary-size/ and /match-len-limit/ parameters. The
-   default level is 6, which sets /dictionary-size/ to 8 MiB /match-len-limit/
-   to 36. /level/ must be between 0 (fast encoder) and 9 (strong compression).
+   default level is 6, which sets /dictionary-size/ to 8 MiB and
+   /match-len-limit/ to 36. /level/ must be between 0 (fast encoder) and
+   9 (strong compression).
 
 #+BEGIN_SRC lisp
 (compress-stream input output &key level member-size dictionary-size match-len-limit) => t
@@ -80,7 +81,7 @@ it, and return the resulting octet vector.
 The decompression can be customized using serveral parameters:
  - When an archive has some trailing data, if /ignore-trailing/ is ~nil~ an
    error will be generated, otherwise the trailing data will be ignored.
- - When an archive as some trailing data looking like a corrupt header, if
+ - When an archive has some trailing data looking like a corrupt header, if
    /loose-trailing/ is ~nil~ an error will be generated, otherwise the trailing
    data will be ignored.
 
