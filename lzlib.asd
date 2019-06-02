@@ -13,5 +13,5 @@
   :components ((:module "src"
                 :serial t
                 :components ((:file "package")
-                             (:file "ffi")
-                             (:file "lzlib")))))
+                             (:file "lzlib")
+                             (:file "lzip")))))

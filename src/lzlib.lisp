@@ -6,58 +6,105 @@
 (in-package :lzlib)
 
 
-(defun lzma-options (level dictionary-size match-len-limit)
-  (cond
-    ((and dictionary-size (not match-len-limit))
-     (error "MATCH-LEN-LIMIT is not set."))
-    ((and match-len-limit (not dictionary-size))
-     (error "DICTIONARY-SIZE is not set."))
-    ((and dictionary-size match-len-limit)
-     (assert (<= (lz-min-dictionary-size)
-                 dictionary-size
-                 (lz-max-dictionary-size)))
-     (assert (<= (lz-min-match-len-limit)
-                 match-len-limit
-                 (lz-max-match-len-limit)))
-     (list dictionary-size match-len-limit))
-    (level
-     (ecase level
-       ((0) '(65535 16))
-       ((1) '(1048576 5))
-       ((2) '(1572864 6))
-       ((3) '(2097152 8))
-       ((4) '(3145728 12))
-       ((5) '(4194304 20))
-       ((6) '(8388608 36))
-       ((7) '(16777216 68))
-       ((8) '(25165824 132))
-       ((9) '(33554432 273))))
-    (t
-     (error "Either LEVEL or DICTIONARY-SIZE and MATCH-LEN-LIMIT must be set."))))
+(cffi:define-foreign-library lzlib
+  (t (:default "liblz")))
 
-(defun compress-stream (in out &key (level 6) dictionary-size match-len-limit)
-  )
+(cffi:use-foreign-library lzlib)
 
-(defun compress-file (in out &key (level 6) dictionary-size match-len-limit)
-  (with-open-file (input-stream in :element-type '(unsigned-byte 8))
-    (with-open-file (output-stream out :element-type '(unsignde-byte 8))
-      (compress-stream input-stream output-stream
-                       :level level
-                       :dictionary-size dictionary-size
-                       :match-len-limit match-len-limit))))
 
-(defun compress-buffer (buffer &key (level 6) dictionary-size match-len-limit)
-  )
+(defconstant +lz-ok+ 0)
+(defconstant +lz-bad-argument+ 1)
+(defconstant +lz-mem-error+ 2)
+(defconstant +lz-sequence-error+ 3)
+(defconstant +lz-header-error+ 4)
+(defconstant +lz-unexpected-eof++ 5)
+(defconstant +lz-data-error+ 6)
+(defconstant +lz-library-error+ 7)
 
-(defun decompress-stream (in out &key (ignore-trailing t) loose-trailing)
-  )
+(cffi:defcfun ("LZ_version" lz-version) :string)
+(cffi:defcfun ("LZ_strerror" ls-strerror) :string
+  (lz-errno :int))
+(cffi:defcfun ("LZ_min_dictionary_bits" lz-min-dictionary-bits) :int)
+(cffi:defcfun ("LZ_min_dictionary_size" lz-min-dictionary-size) :int)
+(cffi:defcfun ("LZ_max_dictionary_bits" lz-max-dictionary-bits) :int)
+(cffi:defcfun ("LZ_max_dictionary_size" lz-max-dictionary-size) :int)
+(cffi:defcfun ("LZ_min_match_len_limit" lz-min-match-len-limit) :int)
+(cffi:defcfun ("LZ_max_match_len_limit" lz-max-match-len-limit) :int)
 
-(defun decompress-file (in out &key (ignore-trailing t) loose-trailing)
-  (with-open-file (input-stream in :element-type '(unsigned-byte 8))
-    (with-open-file (output-stream out :element-type '(unsignde-byte 8))
-      (decompress-stream input-stream output-stream
-                         :ignore-trailing ignore-trailing
-                         :loose-trailing loose-trailing))))
+(cffi:defcfun ("LZ_compress_open" lz-compress-open) :pointer
+  (dictionary-size :int)
+  (match-len-limit :int)
+  (member-size :unsigned-long-long))
+(cffi:defcfun ("LZ_compress_close" lz-compress-close) :int
+  (encoder :pointer))
+(cffi:defcfun ("LZ_compress_finish" lz-compress-finish) :int
+  (encoder :pointer))
+(cffi:defcfun ("LZ_compress_restart_member" lz-compress-restart-member) :int
+  (encoder :pointer)
+  (member-size :unsigned-long-long))
+(cffi:defcfun ("LZ_compress_sync_flush" lz-compress-sync-flush) :int
+  (encoder :pointer))
+(cffi:defcfun ("LZ_compress_read" lz-compress-read) :int
+  (encoder :pointer)
+  (buffer :pointer)
+  (size :int))
+(cffi:defcfun ("LZ_compress_write" lz-compress-write) :int
+  (encoder :pointer)
+  (buffer :pointer)
+  (size :int))
+(cffi:defcfun ("LZ_compress_write_size" lz-compress-write-size) :int
+  (encoder :pointer))
+(cffi:defcfun ("LZ_compress_errno" lz-compress-errno) :int
+  (encoder :pointer))
+(cffi:defcfun ("LZ_compress_finished" lz-compress-finished) :int
+  (encoder :pointer))
+(cffi:defcfun ("LZ_compress_member_finished" lz-compress-member-finished) :int
+  (encoder :pointer))
+(cffi:defcfun ("LZ_compress_data_position" lz-compress-data-position) :unsigned-long-long
+  (encoder :pointer))
+(cffi:defcfun ("LZ_compress_member_position" lz-compress-member-position) :unsigned-long-long
+  (encoder :pointer))
+(cffi:defcfun ("LZ_compress_total_in_size" lz-compress-total-in-size) :unsigned-long-long
+  (encoder :pointer))
+(cffi:defcfun ("LZ_compress_total_out_size" lz-compress-total-out-size) :unsigned-long-long
+  (encoder :pointer))
 
-(defun decompress-buffer (in out &key (ignore-trailing t) loose-trailing)
-  )
+(cffi:defcfun ("LZ_decompress_open" lz-decompress-open) :pointer)
+(cffi:defcfun ("LZ_decompress_close" lz-decompress-close) :int
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_finish" lz-decompress-finish) :int
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_reset" lz-decompress-reset) :int
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_sync_to_member" lz-decompress-sync-to-member) :int
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_read" lz-decompress-read) :int
+  (decoder :pointer)
+  (buffer :pointer)
+  (size :int))
+(cffi:defcfun ("LZ_decompress_write" lz-decompress-write) :int
+  (decoder :pointer)
+  (buffer :pointer)
+  (size :int))
+(cffi:defcfun ("LZ_decompress_write_size" lz-decompress-write-size) :int
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_errno" lz-decompress-errno) :int
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_finished" lz-decompress-finished) :int
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_member_finished" lz-decompress-member-finished) :int
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_member_version" lz-decompress-member-version) :int
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_dictionary_size" lz-decompress-dictionary-size) :int
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_data_crc" lz-decompress-data-crc) :unsigned-int
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_data_position" lz-decompress-data-position) :unsigned-long-long
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_member_position" lz-decompress-member-position) :unsigned-long-long
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_total_in_size" lz-decompress-total-in-size) :unsigned-long-long
+  (decoder :pointer))
+(cffi:defcfun ("LZ_decompress_total_out_size" lz-decompress-total-out-size) :unsigned-long-long
+  (decoder :pointer))
