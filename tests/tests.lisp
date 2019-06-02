@@ -71,7 +71,9 @@
   (signals error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 32 0 0 0 0 0 0 0)))
   ;; Trailing data
   (is (equalp #(1 2 3 4 5) (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0 9 8 7 6 5 4 3 2 1 0))))
-  (signals error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0 9 8 7 6 5 4 3 2 1 0) :ignore-trailing nil)))
+  (signals error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0 9 8 7 6 5 4 3 2 1 0) :ignore-trailing nil))
+  ;; Incomplete stream
+  (signals error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248))))
 
 (test compress-file
   (let ((decompressed (data-file-path "test.txt"))
