@@ -1,4 +1,114 @@
 #+TITLE: cl-lzlib
+#+AUTHOR: Guillaume LE VAILLANT
+#+DATE: 2019-06-02
+#+EMAIL: glv@posteo.net
+#+LANGUAGE: en
+#+OPTIONS: num:nil toc:nil html-postamble:nil html-scripts:nil
+#+HTML_DOCTYPE: html5
 
-This is a Common Lisp binding for the lzlib C library (LZMA compression).
-It can be used to compress and decompress data using the lzip archive format.
+* Description
+
+*cl-lzlib* is a Common Lisp library for lzip (LZMA) compression/decompression
+using bindings to the lzlib C library.
+
+* License
+
+*cl-lzlib* is released under the GPL-3 license. See the [[file:LICENSE][LICENSE]] file for
+details.
+
+* Dependencies
+
+*cl-lzlib* requires:
+ - [[https://common-lisp.net/project/cffi/][cffi]]
+ - [[https://github.com/glv2/cl-octet-streams][cl-octet-streams]]
+ - [[https://www.nongnu.org/lzip/lzlib.html][lzlib]]
+
+*cffi* and *cl-octet-streams* can be easily installed with [[https://www.quicklisp.org][quicklisp]].
+
+A *lzlib* package should be available in almost every GNU/Linux or *BSD
+distribution.
+
+* API
+
+The library can be loaded with the usual:
+
+#+BEGIN_SRC lisp
+(asdf:load-system "lzlib")
+#+END_SRC
+
+or
+
+#+BEGIN_SRC lisp
+(quicklisp:quickload "lzlib")
+#+END_SRC
+
+The functions will then be available in the ~lzlib~ package.
+
+** Compression
+
+The compression can be customized using serveral parameters:
+ - The maximum size of members inside the lzip archive can be indicated with the
+   /member-size/ parameter. The default value is 2 PiB.
+ - The compression level can be indicated either using the /level/ parameter, or
+   by using both the /dictionary-size/ and /match-len-limit/ parameters. The
+   default level is 6, which sets /dictionary-size/ to 8 MiB /match-len-limit/
+   to 36. /level/ must be between 0 (fast encoder) and 9 (strong compression).
+
+#+BEGIN_SRC lisp
+(compress-stream input output &key level member-size dictionary-size match-len-limit) => t
+#+END_SRC
+
+Read the data from the /input/ octet stream, compress it, and write the result
+to the /output/ octet stream.
+
+#+BEGIN_SRC lisp
+(compress-file input output &key level member-size dictionary-size match-len-limit) => t
+#+END_SRC
+
+Read the data from the /input/ file, compress it, and write the result to the
+/output/ file.
+
+#+BEGIN_SRC lisp
+(compress-buffer (buffer &key start end level member-size dictionary-size match-len-limit) => bytes
+#+END_SRC
+
+Read the data between the /start/ and /end/ offsets in the /buffer/, compress
+it, and return the resulting octet vector.
+
+** Decompression
+
+The decompression can be customized using serveral parameters:
+ - When an archive has some trailing data, if /ignore-trailing/ is ~nil~ an
+   error will be generated, otherwise the trailing data will be ignored.
+ - When an archive as some trailing data looking like a corrupt header, if
+   /loose-trailing/ is ~nil~ an error will be generated, otherwise the trailing
+   data will be ignored.
+
+#+BEGIN_SRC lisp
+(decompress-stream input output &key ignore-trailing loose-trailing) => t
+#+END_SRC
+
+Read the data from the /input/ octet stream, decompress it, and write the result
+to the /output/ octet stream.
+
+#+BEGIN_SRC lisp
+(decompress-file input output &key ignore-trailing loose-trailing) => t
+#+END_SRC
+
+Read the data from the /input/ file, decompress it, and write the result to the
+/output/ file.
+
+#+BEGIN_SRC lisp
+(decompress-buffer buffer &key start end ignore-trailing loose-trailing) => bytes
+#+END_SRC
+
+Read the data between the /start/ and /end/ offsets in the /buffer/, decompress
+it, and return the resulting octet vector.
+
+* Tests
+
+The tests require the [[https://common-lisp.net/project/fiveam/][fiveam]] package. They can be run with:
+
+#+BEGIN_SRC lisp
+(asdf:test-system "lzlib")
+#+END_SRC

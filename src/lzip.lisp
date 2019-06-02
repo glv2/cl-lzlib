@@ -82,6 +82,8 @@
   t)
 
 (defun compress-stream (input output &key (level 6) (member-size 2251799813685248) dictionary-size match-len-limit)
+  "Read the data from the INPUT octet stream, compress it, and write the result
+to the OUTPUT octet stream."
   (assert (<= 0 member-size #x7fffffffffffffff))
   (destructuring-bind (dictionary-size match-len-limit)
       (lzma-options level dictionary-size match-len-limit)
@@ -97,6 +99,8 @@
         (lz-compress-close encoder)))))
 
 (defun compress-file (input output &key (level 6) (member-size 2251799813685248) dictionary-size match-len-limit)
+  "Read the data from the INPUT file, compress it, and write the result to the
+OUTPUT file."
   (with-open-file (input-stream input :element-type '(unsigned-byte 8))
     (with-open-file (output-stream output
                                    :direction :output
@@ -108,6 +112,8 @@
                        :match-len-limit match-len-limit))))
 
 (defun compress-buffer (buffer &key (start 0) end (level 6) (member-size 2251799813685248) dictionary-size match-len-limit)
+  "Read the data between the START and END offsets in the BUFFER, compress it,
+and return the resulting octet vector."
   (let ((end (or end (length buffer))))
     (octet-streams:with-octet-output-stream (output)
       (octet-streams:with-octet-input-stream (input buffer start end)
@@ -194,6 +200,8 @@
   t)
 
 (defun decompress-stream (input output &key (ignore-trailing t) loose-trailing)
+  "Read the data from the INPUT octet stream, decompress it, and write the
+result to the OUTPUT octet stream."
   (let ((decoder (lz-decompress-open)))
     (unwind-protect
          (if (or (cffi:null-pointer-p decoder)
@@ -203,6 +211,8 @@
       (lz-decompress-close decoder))))
 
 (defun decompress-file (input output &key (ignore-trailing t) loose-trailing)
+  "Read the data from the INPUT file, decompress it, and write the result to the
+OUTPUT file."
   (with-open-file (input-stream input :element-type '(unsigned-byte 8))
     (with-open-file (output-stream output
                                    :direction :output
@@ -212,6 +222,8 @@
                          :loose-trailing loose-trailing))))
 
 (defun decompress-buffer (buffer &key (start 0) end (ignore-trailing t) loose-trailing)
+  "Read the data between the START and END offsets in the BUFFER, decompress it,
+and return the resulting octet vector."
   (let ((end (or end (length buffer))))
     (octet-streams:with-octet-output-stream (output)
       (octet-streams:with-octet-input-stream (input buffer start end)

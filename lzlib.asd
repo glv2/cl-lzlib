@@ -5,7 +5,7 @@
 
 (defsystem "lzlib"
   :name "lzlib"
-  :description "lzip LZMA (de)compressor using binding to lzlib"
+  :description "lzip (LZMA) (de)compression using binding to lzlib"
   :version "0.1"
   :author "Guillaume LE VAILLANT"
   :license "GPL-3"
