@@ -10,6 +10,7 @@
   :author "Guillaume LE VAILLANT"
   :license "GPL-3"
   :depends-on ("cffi" "cl-octet-streams")
+  :in-order-to ((test-op (test-op "lzlib-tests")))
   :components ((:module "src"
                 :serial t
                 :components ((:file "package")

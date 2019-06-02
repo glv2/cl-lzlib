@@ -6,7 +6,6 @@
 (in-package :lzlib)
 
 
-(defconstant +max-member-size+ 2251799813685248)
 (defconstant +buffer-size+ 65536)
 
 (defun lzma-options (level dictionary-size match-len-limit)
@@ -82,8 +81,8 @@
                 (error "LZ-COMPRESS-RESTART-MEMBER error: ~a." msg))))))))
   t)
 
-(defun compress-stream (input output &key (level 6) (member-size +max-member-size+) dictionary-size match-len-limit)
-  (assert (<= 0 member-size +max-member-size+))
+(defun compress-stream (input output &key (level 6) (member-size 2251799813685248) dictionary-size match-len-limit)
+  (assert (<= 0 member-size #x7fffffffffffffff))
   (destructuring-bind (dictionary-size match-len-limit)
       (lzma-options level dictionary-size match-len-limit)
     (let ((encoder (lz-compress-open dictionary-size match-len-limit member-size)))
@@ -97,16 +96,18 @@
                (compress encoder input output member-size))
         (lz-compress-close encoder)))))
 
-(defun compress-file (input output &key (level 6) (member-size +max-member-size+) dictionary-size match-len-limit)
+(defun compress-file (input output &key (level 6) (member-size 2251799813685248) dictionary-size match-len-limit)
   (with-open-file (input-stream input :element-type '(unsigned-byte 8))
-    (with-open-file (output-stream output :element-type '(unsigned-byte 8))
+    (with-open-file (output-stream output
+                                   :direction :output
+                                   :element-type '(unsigned-byte 8))
       (compress-stream input-stream output-stream
                        :level level
                        :member-size member-size
                        :dictionary-size dictionary-size
                        :match-len-limit match-len-limit))))
 
-(defun compress-buffer (buffer &key (start 0) end (level 6) (member-size +max-member-size+) dictionary-size match-len-limit)
+(defun compress-buffer (buffer &key (start 0) end (level 6) (member-size 2251799813685248) dictionary-size match-len-limit)
   (let ((end (or end (length buffer))))
     (octet-streams:with-octet-output-stream (output)
       (octet-streams:with-octet-input-stream (input buffer start end)
@@ -203,7 +204,9 @@
 
 (defun decompress-file (input output &key (ignore-trailing t) loose-trailing)
   (with-open-file (input-stream input :element-type '(unsigned-byte 8))
-    (with-open-file (output-stream output :element-type '(unsigned-byte 8))
+    (with-open-file (output-stream output
+                                   :direction :output
+                                   :element-type '(unsigned-byte 8))
       (decompress-stream input-stream output-stream
                          :ignore-trailing ignore-trailing
                          :loose-trailing loose-trailing))))
