@@ -5,11 +5,11 @@
 
 (defsystem "lzlib"
   :name "lzlib"
-  :description "FFI binding the lzlib LZMA (de)compressor"
+  :description "lzip LZMA (de)compressor using binding to lzlib"
   :version "0.1"
   :author "Guillaume LE VAILLANT"
   :license "GPL-3"
-  :depends-on ("cffi")
+  :depends-on ("cffi" "cl-octet-streams")
   :components ((:module "src"
                 :serial t
                 :components ((:file "package")

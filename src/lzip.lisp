@@ -105,9 +105,14 @@
                        :dictionary-size dictionary-size
                        :match-len-limit match-len-limit))))
 
-(defun compress-buffer (buffer &key (level 6) (member-size +max-member-size+) dictionary-size match-len-limit)
-  ;; TODO
-  )
+(defun compress-buffer (buffer &key (start 0) end (level 6) (member-size +max-member-size+) dictionary-size match-len-limit)
+  (let ((end (or end (length buffer))))
+    (octet-streams:with-octet-output-stream (output)
+      (octet-streams:with-octet-input-stream (input buffer :start start :end end)
+        (compress-stream input output
+                         :level level
+                         :dictionary-size dictionary-size
+                         :match-len-limit match-len-limit)))))
 
 
 (defun decompress (decoder input output ignore-trailing loose-trailing)
@@ -201,6 +206,10 @@
                          :ignore-trailing ignore-trailing
                          :loose-trailing loose-trailing))))
 
-(defun decompress-buffer (buffer &key (ignore-trailing t) loose-trailing)
-  ;; TODO
-  )
+(defun decompress-buffer (buffer &key (start 0) end (ignore-trailing t) loose-trailing)
+  (let ((end (or end (length buffer))))
+    (octet-streams:with-octet-output-stream (output)
+      (octet-streams:with-octet-input-stream (input buffer :start start :end end)
+        (decompress-stream input output
+                           :ignore-trailing ignore-trailing
+                           :loose-trailing loose-trailing)))))

@@ -4,4 +4,11 @@
 ;;; See the file LICENSE for terms of use and distribution.
 
 (defpackage :lzlib
-  (:use :cl))
+  (:use :cl)
+  (:export #:+max-member-size+
+           #:compress-stream
+           #:compress-file
+           #:compress-buffer
+           #:decompress-stream
+           #:decompress-file
+           #:decompress-buffer))
