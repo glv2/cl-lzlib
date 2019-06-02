@@ -207,7 +207,11 @@ and return the resulting octet vector."
                   (t
                    (return))))
               (when (= lz-errno +lz-mem-error+)
-                (error "Not enough memory."))))
+                (error "Not enough memory."))
+              (let ((pos (lz-decompress-total-in-size decoder)))
+                (if (= lz-errno +lz-unexpected-eof+)
+                    (error "File ends unexpectedly at pos ~d." pos)
+                    (error "Decoder error ar pos ~d." pos)))))
 
           (when (= (lz-decompress-finished decoder) 1)
             (return))
