@@ -7,6 +7,8 @@
 
 
 (cffi:define-foreign-library lzlib
+  (:unix (:or "liblz.so"
+              "liblz.so.1"))
   (t (:default "liblz")))
 
 (cffi:use-foreign-library lzlib)

@@ -26,7 +26,8 @@ details.
 *cffi* and *cl-octet-streams* can be easily installed with [[https://www.quicklisp.org][quicklisp]].
 
 A *lzlib* package should be available in almost every GNU/Linux or *BSD
-distribution.
+distribution. For example it is called /lzlib/ on Gentoo and Guix, and
+/liblz1/ on Debian and Ubuntu.
 
 * API
 
