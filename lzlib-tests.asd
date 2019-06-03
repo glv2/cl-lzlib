@@ -9,7 +9,7 @@
   :version "0.1"
   :author "Guillaume LE VAILLANT"
   :license "GPL-3"
-  :depends-on ("fiveam" "lzlib")
+  :depends-on ("cl-octet-streams" "fiveam" "lzlib")
   :in-order-to ((test-op (load-op "lzlib-tests")))
   :perform (test-op (op s)
              (let ((tests (uiop:find-symbol* 'lzlib-unit-tests :lzlib-tests)))
