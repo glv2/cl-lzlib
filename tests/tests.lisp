@@ -52,28 +52,28 @@
     (is (equalp decompressed (decompress-buffer compressed))))
   (is (equalp #(1 2 3 4 5) (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0))))
   ;; No header
-  (signals error (decompress-buffer #()))
+  (signals lzlib-error (decompress-buffer #()))
   ;; Bad header
-  (signals error (decompress-buffer #(1 2 3 4 5 6 7 8 9)))
+  (signals lzlib-error (decompress-buffer #(1 2 3 4 5 6 7 8 9)))
   ;; Incomplete header
-  (signals error (decompress-buffer #(76 90 73 80)))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80)))
   ;; Bad version number
-  (signals error (decompress-buffer #(76 90 73 80 23 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 23 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
   ;; Bad dictionary size
-  (signals error (decompress-buffer #(76 90 73 80 1 255 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 255 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
   ;; Bad byte in LZMA stream
-  (signals error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 14 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 14 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
   ;; Bad byte in CRC
-  (signals error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 13 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 13 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
   ;; Bad byte in data size
-  (signals error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 2 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 2 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
   ;; Bad byte in member size
-  (signals error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 32 0 0 0 0 0 0 0)))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 32 0 0 0 0 0 0 0)))
   ;; Trailing data
   (is (equalp #(1 2 3 4 5) (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0 9 8 7 6 5 4 3 2 1 0))))
-  (signals error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0 9 8 7 6 5 4 3 2 1 0) :ignore-trailing nil))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0 9 8 7 6 5 4 3 2 1 0) :ignore-trailing nil))
   ;; Incomplete stream
-  (signals error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248))))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248))))
 
 (test compress-file
   (let ((decompressed (data-file-path "test.txt"))

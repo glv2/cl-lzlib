@@ -10,4 +10,5 @@
            #:compress-buffer
            #:decompress-stream
            #:decompress-file
-           #:decompress-buffer))
+           #:decompress-buffer
+           #:lzlib-error))

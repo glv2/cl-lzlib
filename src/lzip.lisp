@@ -9,6 +9,15 @@
 (defconstant +buffer-size+ 65536)
 
 
+(define-condition lzlib-error (simple-error)
+  ())
+
+(defmacro lz-error (message &rest args)
+  `(error 'lzlib-error
+          :format-control ,message
+          :format-arguments (list ,@args)))
+
+
 (declaim (inline copy-to-ffi-buffer copy-from-ffi-buffer))
 
 (defun copy-to-ffi-buffer (buffer ffi-buffer size)
@@ -41,7 +50,7 @@
               (when (plusp rd)
                 (copy-to-ffi-buffer buffer ffi-buffer rd)
                 (when (/= (lz-compress-write encoder ffi-buffer rd) rd)
-                  (error "Library error (LZ-COMPRESS-WRITE).")))
+                  (lz-error "Library error (LZ-COMPRESS-WRITE).")))
               (when (< rd size)
                 (lz-compress-finish encoder))
               (incf in-size rd)))
@@ -50,27 +59,27 @@
           (cond
             ((minusp out-size)
              (let ((msg (lz-strerror (lz-compress-errno encoder))))
-               (error "LZ-COMPRESS-READ error: ~a." msg)))
+               (lz-error "LZ-COMPRESS-READ error: ~a." msg)))
             ((plusp out-size)
              (copy-from-ffi-buffer ffi-buffer buffer out-size)
              (write-sequence buffer output :end out-size))
             ((zerop in-size)
-             (error "Library error (LZ-COMPRESS-READ).")))
+             (lz-error "Library error (LZ-COMPRESS-READ).")))
 
           (unless (zerop (lz-compress-member-finished encoder))
             (when (= (lz-compress-finished encoder) 1)
               (return))
             (when (minusp (lz-compress-restart-member encoder member-size))
               (let ((msg (lz-strerror (lz-compress-errno encoder))))
-                (error "LZ-COMPRESS-RESTART-MEMBER error: ~a." msg))))))))
+                (lz-error "LZ-COMPRESS-RESTART-MEMBER error: ~a." msg))))))))
   t)
 
 (defun lzma-options (level dictionary-size match-len-limit)
   (cond
     ((and dictionary-size (not match-len-limit))
-     (error "MATCH-LEN-LIMIT is not set."))
+     (lz-error "MATCH-LEN-LIMIT is not set."))
     ((and match-len-limit (not dictionary-size))
-     (error "DICTIONARY-SIZE is not set."))
+     (lz-error "DICTIONARY-SIZE is not set."))
     ((and dictionary-size match-len-limit)
      (assert (<= (lz-min-dictionary-size)
                  dictionary-size
@@ -92,7 +101,7 @@
        ((8) '(25165824 132))
        ((9) '(33554432 273))))
     (t
-     (error "Either LEVEL or DICTIONARY-SIZE and MATCH-LEN-LIMIT must be set."))))
+     (lz-error "Either LEVEL or DICTIONARY-SIZE and MATCH-LEN-LIMIT must be set."))))
 
 (defun compress-stream (input output &key (level 6) (member-size 2251799813685248) dictionary-size match-len-limit)
   "Read the data from the INPUT octet stream, compress it, and write the result
@@ -106,8 +115,8 @@ to the OUTPUT octet stream."
                    (/= (lz-compress-errno encoder) +lz-ok+))
                (if (or (cffi:null-pointer-p encoder)
                        (= (lz-compress-errno encoder) +lz-mem-error+))
-                   (error "Not enough memory. Try a smaller dictionary size.")
-                   (error "Invalid argument to encoder."))
+                   (lz-error "Not enough memory. Try a smaller dictionary size.")
+                   (lz-error "Invalid argument to encoder."))
                (compress encoder input output member-size))
         (lz-compress-close encoder)))))
 
@@ -153,7 +162,7 @@ and return the resulting octet vector."
             (when (plusp in-size)
               (copy-to-ffi-buffer buffer ffi-buffer in-size)
               (when (/= (lz-decompress-write decoder ffi-buffer in-size) in-size)
-                (error "Library error (LZ-DECOMPRESS-WRITE).")))
+                (lz-error "Library error (LZ-DECOMPRESS-WRITE).")))
             (when (< in-size max-in-size)
               (lz-decompress-finish decoder)))
 
@@ -176,47 +185,47 @@ and return the resulting octet vector."
             (let ((member-pos (lz-decompress-member-position decoder))
                   (lz-errno (lz-decompress-errno decoder)))
               (when (= lz-errno +lz-library-error+)
-                (error "Library error (LZ-DECOMPRESS-READ)."))
+                (lz-error "Library error (LZ-DECOMPRESS-READ)."))
               (when (<= member-pos 6)
                 (cond
                   ((= lz-errno +lz-unexpected-eof+)
                    (if first-member
-                       (error "File ends unexpectedly at member header.")
-                       (error "Truncated header in multimember file.")))
+                       (lz-error "File ends unexpectedly at member header.")
+                       (lz-error "Truncated header in multimember file.")))
                   ((= lz-errno +lz-data-error+)
                    (cond
                      ((= member-pos 4)
                       (let ((version (lz-decompress-member-version decoder)))
-                        (error "Version ~d member format not supported." version)))
+                        (lz-error "Version ~d member format not supported." version)))
                      ((= member-pos 5)
-                      (error "Invalid dictionary size in member header."))
+                      (lz-error "Invalid dictionary size in member header."))
                      (first-member
-                      (error "Bad version or dictionary size in member header."))
+                      (lz-error "Bad version or dictionary size in member header."))
                      ((not loose-trailing)
-                      (error "Corrupt header in multimember file."))
+                      (lz-error "Corrupt header in multimember file."))
                      ((not ignore-trailing)
-                      (error "Trailing data not allowed."))
+                      (lz-error "Trailing data not allowed."))
                      (t
                       (return))))))
               (when (= lz-errno +lz-header-error+)
                 (cond
                   (first-member
-                   (error "Bad magic number (file not in lzip format)."))
+                   (lz-error "Bad magic number (file not in lzip format)."))
                   ((not ignore-trailing)
-                   (error "Trailing data not allowed."))
+                   (lz-error "Trailing data not allowed."))
                   (t
                    (return))))
               (when (= lz-errno +lz-mem-error+)
-                (error "Not enough memory."))
+                (lz-error "Not enough memory."))
               (let ((pos (lz-decompress-total-in-size decoder)))
                 (if (= lz-errno +lz-unexpected-eof+)
-                    (error "File ends unexpectedly at pos ~d." pos)
-                    (error "Decoder error ar pos ~d." pos)))))
+                    (lz-error "File ends unexpectedly at pos ~d." pos)
+                    (lz-error "Decoder error ar pos ~d." pos)))))
 
           (when (= (lz-decompress-finished decoder) 1)
             (return))
           (when (and (zerop in-size) (zerop out-size))
-            (error "Library error (stalled)."))))))
+            (lz-error "Library error (stalled)."))))))
   t)
 
 (defun decompress-stream (input output &key (ignore-trailing t) loose-trailing)
@@ -226,7 +235,7 @@ result to the OUTPUT octet stream."
     (unwind-protect
          (if (or (cffi:null-pointer-p decoder)
                  (/= (lz-decompress-errno decoder) +lz-ok+))
-             (error "Not enough memory.")
+             (lz-error "Not enough memory.")
              (decompress decoder input output ignore-trailing loose-trailing))
       (lz-decompress-close decoder))))
 
