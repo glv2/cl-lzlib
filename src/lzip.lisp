@@ -6,8 +6,13 @@
 (in-package :lzlib)
 
 
-(defconstant +buffer-size+ 65536)
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defconstant +buffer-size+ 65536))
 
+
+;;;
+;;; Errors
+;;;
 
 (define-condition lzlib-error (simple-error)
   ())
@@ -18,9 +23,14 @@
           :format-arguments (list ,@args)))
 
 
+;;;
+;;; Tools
+;;;
+
 (declaim (inline copy-to-ffi-buffer copy-from-ffi-buffer))
 
 (defun copy-to-ffi-buffer (buffer ffi-buffer size)
+  "Copy SIZE bytes from a Lisp BUFFER to a foreign FFI-BUFFER."
   (declare (type (simple-array (unsigned-byte 8) (*)) buffer)
            (type fixnum size)
            (optimize (speed 3) (space 0) (debug 0) (safety 1)))
@@ -28,6 +38,7 @@
     (setf (cffi:mem-aref ffi-buffer :unsigned-char i) (aref buffer i))))
 
 (defun copy-from-ffi-buffer (ffi-buffer buffer size)
+  "Copy SIZE bytes from a foreign FFI-BUFFER to a Lisp BUFFER."
   (declare (type (simple-array (unsigned-byte 8) (*)) buffer)
            (type fixnum size)
            (optimize (speed 3) (space 0) (debug 0) (safety 1)))
@@ -35,7 +46,13 @@
     (setf (aref buffer i) (cffi:mem-aref ffi-buffer :unsigned-char i))))
 
 
+;;;
+;;; Compression functions
+;;;
+
 (defun compress (encoder input output member-size)
+  "Read the data from the INPUT octet stream, compress it with the ENCODER, and
+write the result to the OUTPUT octet stream."
   (declare (optimize (speed 3) (space 0) (debug 0) (safety 1)))
   (let ((buffer (make-array +buffer-size+ :element-type '(unsigned-byte 8))))
     (declare (type (simple-array (unsigned-byte 8) (*)) buffer)
@@ -75,6 +92,7 @@
   t)
 
 (defun lzma-options (level dictionary-size match-len-limit)
+  "Get the LZMA parameters matching the given arguments."
   (cond
     ((and dictionary-size (not match-len-limit))
      (lz-error "MATCH-LEN-LIMIT is not set."))
@@ -146,7 +164,13 @@ and return the resulting octet vector."
                          :match-len-limit match-len-limit)))))
 
 
+;;;
+;;; Decompression functions
+;;;
+
 (defun decompress (decoder input output ignore-trailing loose-trailing)
+  "Read the data from the INPUT octet stream, decompress itwith the DECODER, and
+write the result to the OUTPUT octet stream."
   (declare (optimize (speed 3) (space 0) (debug 0) (safety 1)))
   (let ((first-member t)
         (buffer (make-array +buffer-size+ :element-type '(unsigned-byte 8))))
