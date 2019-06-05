@@ -9,6 +9,15 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defconstant +buffer-size+ 65536))
 
+(deftype u8 ()
+  '(unsigned-byte 8))
+
+(deftype i32 ()
+  '(signed-byte 32))
+
+(deftype u64 ()
+  '(unsigned-byte 64))
+
 
 ;;;
 ;;; Errors
@@ -31,7 +40,7 @@
 
 (defun copy-to-ffi-buffer (buffer ffi-buffer size)
   "Copy SIZE bytes from a Lisp BUFFER to a foreign FFI-BUFFER."
-  (declare (type (simple-array (unsigned-byte 8) (*)) buffer)
+  (declare (type (simple-array u8 (*)) buffer)
            (type fixnum size)
            (optimize (speed 3) (space 0) (debug 0) (safety 1)))
   (dotimes (i size ffi-buffer)
@@ -39,7 +48,7 @@
 
 (defun copy-from-ffi-buffer (ffi-buffer buffer size)
   "Copy SIZE bytes from a foreign FFI-BUFFER to a Lisp BUFFER."
-  (declare (type (simple-array (unsigned-byte 8) (*)) buffer)
+  (declare (type (simple-array u8 (*)) buffer)
            (type fixnum size)
            (optimize (speed 3) (space 0) (debug 0) (safety 1)))
   (dotimes (i size buffer)
@@ -53,26 +62,29 @@
 (defun compress (encoder input output member-size)
   "Read the data from the INPUT octet stream, compress it with the ENCODER, and
 write the result to the OUTPUT octet stream."
-  (declare (optimize (speed 3) (space 0) (debug 0) (safety 1)))
-  (let ((buffer (make-array +buffer-size+ :element-type '(unsigned-byte 8))))
-    (declare (type (simple-array (unsigned-byte 8) (*)) buffer)
-             (dynamic-extent buffer))
-    (cffi:with-foreign-object (ffi-buffer :unsigned-char +buffer-size+)
+  (declare (type (unsigned-byte 63) member-size)
+           (optimize (speed 3) (space 0) (debug 0) (safety 1)))
+  (let ((buffer (make-array #.+buffer-size+ :element-type 'u8)))
+    (declare (type (simple-array u8 (#.+buffer-size+)) buffer))
+    (cffi:with-foreign-object (ffi-buffer :unsigned-char #.+buffer-size+)
       (loop do
         (let ((in-size 0)
               (out-size 0))
-          (loop while (plusp (lz-compress-write-size encoder)) do
-            (let* ((size (min (lz-compress-write-size encoder) +buffer-size+))
-                   (rd (read-sequence buffer input :end size)))
-              (when (plusp rd)
-                (copy-to-ffi-buffer buffer ffi-buffer rd)
-                (when (/= (lz-compress-write encoder ffi-buffer rd) rd)
-                  (lz-error "Library error (LZ-COMPRESS-WRITE).")))
-              (when (< rd size)
-                (lz-compress-finish encoder))
-              (incf in-size rd)))
+          (declare (type i32 in-size out-size))
+          (loop for max-in-size = (the i32 (lz-compress-write-size encoder))
+                while (plusp max-in-size)
+                do (let* ((size (min max-in-size #.+buffer-size+))
+                          (rd (read-sequence buffer input :end size)))
+                     (declare (type (integer 0 #.+buffer-size+) size rd))
+                     (when (plusp rd)
+                       (copy-to-ffi-buffer buffer ffi-buffer rd)
+                       (when (/= rd (the i32 (lz-compress-write encoder ffi-buffer rd)))
+                         (lz-error "Library error (LZ-COMPRESS-WRITE).")))
+                     (when (< rd size)
+                       (lz-compress-finish encoder))
+                     (incf in-size rd)))
 
-          (setf out-size (lz-compress-read encoder ffi-buffer +buffer-size+))
+          (setf out-size (the i32 (lz-compress-read encoder ffi-buffer #.+buffer-size+)))
           (cond
             ((minusp out-size)
              (let ((msg (lz-strerror (lz-compress-errno encoder))))
@@ -83,10 +95,10 @@ write the result to the OUTPUT octet stream."
             ((zerop in-size)
              (lz-error "Library error (LZ-COMPRESS-READ).")))
 
-          (unless (zerop (lz-compress-member-finished encoder))
-            (when (= (lz-compress-finished encoder) 1)
+          (unless (zerop (the i32 (lz-compress-member-finished encoder)))
+            (when (= 1 (the i32 (lz-compress-finished encoder)))
               (return))
-            (when (minusp (lz-compress-restart-member encoder member-size))
+            (when (minusp (the i32 (lz-compress-restart-member encoder member-size)))
               (let ((msg (lz-strerror (lz-compress-errno encoder))))
                 (lz-error "LZ-COMPRESS-RESTART-MEMBER error: ~a." msg))))))))
   t)
@@ -141,10 +153,8 @@ to the OUTPUT octet stream."
 (defun compress-file (input output &key (level 6) (member-size 2251799813685248) dictionary-size match-len-limit)
   "Read the data from the INPUT file, compress it, and write the result to the
 OUTPUT file."
-  (with-open-file (input-stream input :element-type '(unsigned-byte 8))
-    (with-open-file (output-stream output
-                                   :direction :output
-                                   :element-type '(unsigned-byte 8))
+  (with-open-file (input-stream input :element-type 'u8)
+    (with-open-file (output-stream output :direction :output :element-type 'u8)
       (compress-stream input-stream output-stream
                        :level level
                        :member-size member-size
@@ -173,25 +183,28 @@ and return the resulting octet vector."
 write the result to the OUTPUT octet stream."
   (declare (optimize (speed 3) (space 0) (debug 0) (safety 1)))
   (let ((first-member t)
-        (buffer (make-array +buffer-size+ :element-type '(unsigned-byte 8))))
-    (declare (type (simple-array (unsigned-byte 8) (*)) buffer)
-             (dynamic-extent buffer))
-    (cffi:with-foreign-object (ffi-buffer :unsigned-char +buffer-size+)
+        (buffer (make-array #.+buffer-size+ :element-type 'u8)))
+    (declare (type (simple-array u8 (#.+buffer-size+)) buffer))
+    (cffi:with-foreign-object (ffi-buffer :unsigned-char #.+buffer-size+)
       (loop do
-        (let ((max-in-size (min (lz-decompress-write-size decoder) +buffer-size+))
+        (let ((max-in-size (min (the i32 (lz-decompress-write-size decoder))
+                                #.+buffer-size+))
               (in-size 0)
               (out-size 0))
+          (declare (type i32 max-in-size in-size out-size))
           (when (plusp max-in-size)
             (setf in-size (read-sequence buffer input :end max-in-size))
             (when (plusp in-size)
               (copy-to-ffi-buffer buffer ffi-buffer in-size)
-              (when (/= (lz-decompress-write decoder ffi-buffer in-size) in-size)
+              (when (/= (the i32 (lz-decompress-write decoder ffi-buffer in-size))
+                        in-size)
                 (lz-error "Library error (LZ-DECOMPRESS-WRITE).")))
             (when (< in-size max-in-size)
               (lz-decompress-finish decoder)))
 
           (loop do
-            (let ((rd (lz-decompress-read decoder ffi-buffer +buffer-size+)))
+            (let ((rd (lz-decompress-read decoder ffi-buffer #.+buffer-size+)))
+              (declare (type i32 rd))
               (cond
                 ((plusp rd)
                  (copy-from-ffi-buffer ffi-buffer buffer rd)
@@ -200,7 +213,7 @@ write the result to the OUTPUT octet stream."
                 ((minusp rd)
                  (setf out-size rd)
                  (return)))
-              (when (= (lz-decompress-member-finished decoder) 1)
+              (when (= 1 (the i32 (lz-decompress-member-finished decoder)))
                 (setf first-member nil))
               (unless (plusp rd)
                 (return))))
@@ -208,6 +221,8 @@ write the result to the OUTPUT octet stream."
           (when (or (minusp out-size) (and first-member (zerop out-size)))
             (let ((member-pos (lz-decompress-member-position decoder))
                   (lz-errno (lz-decompress-errno decoder)))
+              (declare (type u64 member-pos)
+                       (type i32 lz-errno))
               (when (= lz-errno +lz-library-error+)
                 (lz-error "Library error (LZ-DECOMPRESS-READ)."))
               (when (<= member-pos 6)
@@ -242,11 +257,12 @@ write the result to the OUTPUT octet stream."
               (when (= lz-errno +lz-mem-error+)
                 (lz-error "Not enough memory."))
               (let ((pos (lz-decompress-total-in-size decoder)))
+                (declare (type u64 pos))
                 (if (= lz-errno +lz-unexpected-eof+)
                     (lz-error "File ends unexpectedly at pos ~d." pos)
                     (lz-error "Decoder error ar pos ~d." pos)))))
 
-          (when (= (lz-decompress-finished decoder) 1)
+          (when (= 1 (the i32 (lz-decompress-finished decoder)))
             (return))
           (when (and (zerop in-size) (zerop out-size))
             (lz-error "Library error (stalled)."))))))
@@ -266,10 +282,8 @@ result to the OUTPUT octet stream."
 (defun decompress-file (input output &key (ignore-trailing t) loose-trailing)
   "Read the data from the INPUT file, decompress it, and write the result to the
 OUTPUT file."
-  (with-open-file (input-stream input :element-type '(unsigned-byte 8))
-    (with-open-file (output-stream output
-                                   :direction :output
-                                   :element-type '(unsigned-byte 8))
+  (with-open-file (input-stream input :element-type 'u8)
+    (with-open-file (output-stream output :direction :output :element-type 'u8)
       (decompress-stream input-stream output-stream
                          :ignore-trailing ignore-trailing
                          :loose-trailing loose-trailing))))
