@@ -11,7 +11,7 @@
 
 (defun data-file-path (filename)
   (let ((path (concatenate 'string "tests/" filename)))
-    (asdf:system-relative-pathname "lzlib-tests"path)))
+    (asdf:system-relative-pathname "lzlib-tests" path)))
 
 (defun load-data-file (filename)
   (with-open-file (file (data-file-path filename) :element-type '(unsigned-byte 8))
