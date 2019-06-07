@@ -33,29 +33,6 @@
 
 
 ;;;
-;;; Tools
-;;;
-
-(declaim (inline copy-to-ffi-buffer copy-from-ffi-buffer))
-
-(defun copy-to-ffi-buffer (buffer ffi-buffer size)
-  "Copy SIZE bytes from a Lisp BUFFER to a foreign FFI-BUFFER."
-  (declare (type (simple-array u8 (*)) buffer)
-           (type fixnum size)
-           (optimize (speed 3) (space 0) (debug 0) (safety 1)))
-  (dotimes (i size ffi-buffer)
-    (setf (cffi:mem-aref ffi-buffer :unsigned-char i) (aref buffer i))))
-
-(defun copy-from-ffi-buffer (ffi-buffer buffer size)
-  "Copy SIZE bytes from a foreign FFI-BUFFER to a Lisp BUFFER."
-  (declare (type (simple-array u8 (*)) buffer)
-           (type fixnum size)
-           (optimize (speed 3) (space 0) (debug 0) (safety 1)))
-  (dotimes (i size buffer)
-    (setf (aref buffer i) (cffi:mem-aref ffi-buffer :unsigned-char i))))
-
-
-;;;
 ;;; Compression functions
 ;;;
 
@@ -64,9 +41,8 @@
 write the result to the OUTPUT octet stream."
   (declare (type (unsigned-byte 63) member-size)
            (optimize (speed 3) (space 0) (debug 0) (safety 1)))
-  (let ((buffer (make-array #.+buffer-size+ :element-type 'u8)))
-    (declare (type (simple-array u8 (#.+buffer-size+)) buffer))
-    (cffi:with-foreign-object (ffi-buffer :unsigned-char #.+buffer-size+)
+  (let ((buffer (cffi:make-shareable-byte-vector #.+buffer-size+)))
+    (cffi:with-pointer-to-vector-data (ffi-buffer buffer)
       (loop do
         (let ((in-size 0)
               (out-size 0))
@@ -77,7 +53,6 @@ write the result to the OUTPUT octet stream."
                           (rd (read-sequence buffer input :end size)))
                      (declare (type (integer 0 #.+buffer-size+) size rd))
                      (when (plusp rd)
-                       (copy-to-ffi-buffer buffer ffi-buffer rd)
                        (when (/= rd (the i32 (lz-compress-write encoder ffi-buffer rd)))
                          (lz-error "Library error (LZ-COMPRESS-WRITE).")))
                      (when (< rd size)
@@ -90,7 +65,6 @@ write the result to the OUTPUT octet stream."
              (let ((msg (lz-strerror (lz-compress-errno encoder))))
                (lz-error "LZ-COMPRESS-READ error: ~a." msg)))
             ((plusp out-size)
-             (copy-from-ffi-buffer ffi-buffer buffer out-size)
              (write-sequence buffer output :end out-size))
             ((zerop in-size)
              (lz-error "Library error (LZ-COMPRESS-READ).")))
@@ -183,9 +157,8 @@ and return the resulting octet vector."
 write the result to the OUTPUT octet stream."
   (declare (optimize (speed 3) (space 0) (debug 0) (safety 1)))
   (let ((first-member t)
-        (buffer (make-array #.+buffer-size+ :element-type 'u8)))
-    (declare (type (simple-array u8 (#.+buffer-size+)) buffer))
-    (cffi:with-foreign-object (ffi-buffer :unsigned-char #.+buffer-size+)
+        (buffer (cffi:make-shareable-byte-vector #.+buffer-size+)))
+    (cffi:with-pointer-to-vector-data (ffi-buffer buffer)
       (loop do
         (let ((max-in-size (min (the i32 (lz-decompress-write-size decoder))
                                 #.+buffer-size+))
@@ -195,7 +168,6 @@ write the result to the OUTPUT octet stream."
           (when (plusp max-in-size)
             (setf in-size (read-sequence buffer input :end max-in-size))
             (when (plusp in-size)
-              (copy-to-ffi-buffer buffer ffi-buffer in-size)
               (when (/= (the i32 (lz-decompress-write decoder ffi-buffer in-size))
                         in-size)
                 (lz-error "Library error (LZ-DECOMPRESS-WRITE).")))
@@ -207,7 +179,6 @@ write the result to the OUTPUT octet stream."
               (declare (type i32 rd))
               (cond
                 ((plusp rd)
-                 (copy-from-ffi-buffer ffi-buffer buffer rd)
                  (write-sequence buffer output :end rd)
                  (incf out-size rd))
                 ((minusp rd)
