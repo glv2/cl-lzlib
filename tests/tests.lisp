@@ -14,7 +14,8 @@
     (asdf:system-relative-pathname "lzlib-tests" path)))
 
 (defun load-data-file (filename)
-  (with-open-file (file (data-file-path filename) :element-type '(unsigned-byte 8))
+  (with-open-file (file (data-file-path filename)
+                        :element-type '(unsigned-byte 8))
     (let* ((size (file-length file))
            (buffer (make-array size :element-type '(unsigned-byte 8))))
       (read-sequence buffer file)
@@ -41,14 +42,37 @@
 (test decompress-stream
   (is (equalp #()
               (with-octet-output-stream (output)
-                (with-octet-input-stream (input #(76 90 73 80 1 12 0 131 255 251 255 255 192 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 36 0 0 0 0 0 0 0))
+                (with-octet-input-stream (input #(76 90 73 80 1 12 0 131
+                                                  255 251 255 255 192 0 0 0
+                                                  0 0 0 0 0 0 0 0
+                                                  0 0 0 0 36 0 0 0
+                                                  0 0 0 0))
                   (decompress-stream input output)))))
   (is (equalp #(1 2 3 4 5)
               (with-octet-output-stream (output)
-                (with-octet-input-stream (input #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0))
+                (with-octet-input-stream (input #(76 90 73 80 1 12 0 0
+                                                  128 157 97 211 29 7 5 127
+                                                  255 248 129 32 0 244 153 11
+                                                  71 5 0 0 0 0 0 0
+                                                  0 41 0 0 0 0 0 0
+                                                  0))
                   (decompress-stream input output)))))
   (let ((tmp (with-octet-output-stream (output)
-               (with-octet-input-stream (input #(76 90 73 80 1 113 0 57 239 251 191 254 163 177 94 229 248 63 178 170 38 85 248 104 112 65 112 21 15 141 253 30 76 27 138 66 183 25 244 105 24 113 174 102 35 138 138 77 47 163 13 217 127 166 227 140 35 17 83 224 89 24 197 117 138 226 119 248 182 148 127 12 106 192 222 116 73 100 226 233 92 83 178 4 214 177 246 68 181 91 255 255 185 170 0 0 122 78 48 21 160 134 1 0 0 0 0 0 116 0 0 0 0 0 0 0))
+               (with-octet-input-stream (input #(76 90 73 80 1 113 0 57
+                                                 239 251 191 254 163 177 94 229
+                                                 248 63 178 170 38 85 248 104
+                                                 112 65 112 21 15 141 253 30
+                                                 76 27 138 66 183 25 244 105
+                                                 24 113 174 102 35 138 138 77
+                                                 47 163 13 217 127 166 227 140
+                                                 35 17 83 224 89 24 197 117
+                                                 138 226 119 248 182 148 127 12
+                                                 106 192 222 116 73 100 226 233
+                                                 92 83 178 4 214 177 246 68
+                                                 181 91 255 255 185 170 0 0
+                                                 122 78 48 21 160 134 1 0
+                                                 0 0 0 0 116 0 0 0
+                                                 0 0 0 0))
                  (decompress-stream input output)))))
     (is (= 100000 (length tmp)))
     (is-true (every (lambda (x) (= x 115)) tmp))))
@@ -65,7 +89,12 @@
   (let ((decompressed (load-data-file "test.txt"))
         (compressed (load-data-file "test.txt.lz")))
     (is (equalp decompressed (decompress-buffer compressed))))
-  (is (equalp #(1 2 3 4 5) (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0))))
+  (is (equalp #(1 2 3 4 5) (decompress-buffer #(76 90 73 80 1 12 0 0
+                                                128 157 97 211 29 7 5 127
+                                                255 248 129 32 0 244 153 11
+                                                71 5 0 0 0 0 0 0
+                                                0 41 0 0 0 0 0 0
+                                                0))))
   ;; No header
   (signals lzlib-error (decompress-buffer #()))
   ;; Bad header
@@ -73,22 +102,83 @@
   ;; Incomplete header
   (signals lzlib-error (decompress-buffer #(76 90 73 80)))
   ;; Bad version number
-  (signals lzlib-error (decompress-buffer #(76 90 73 80 23 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 23 12 0 0
+                                            128 157 97 211 29 7 5 127
+                                            255 248 129 32 0 244 153 11
+                                            71 5 0 0 0 0 0 0
+                                            0 41 0 0 0 0 0 0
+                                            0)))
   ;; Bad dictionary size
-  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 255 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 255 0 0
+                                            128 157 97 211 29 7 5 127
+                                            255 248 129 32 0 244 153 11
+                                            71 5 0 0 0 0 0 0
+                                            0 41 0 0 0 0 0 0
+                                            0)))
   ;; Bad byte in LZMA stream
-  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 14 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0
+                                            128 157 14 211 29 7 5 127
+                                            255 248 129 32 0 244 153 11
+                                            71 5 0 0 0 0 0 0
+                                            0 41 0 0 0 0 0 0
+                                            0)))
   ;; Bad byte in CRC
-  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 13 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0
+                                            128 157 97 211 29 7 5 127
+                                            255 248 129 32 0 244 13 11
+                                            71 5 0 0 0 0 0 0
+                                            0 41 0 0 0 0 0 0
+                                            0)))
   ;; Bad byte in data size
-  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 2 0 0 0 0 0 0 41 0 0 0 0 0 0 0)))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0
+                                            128 157 97 211 29 7 5 127
+                                            255 248 129 32 0 244 153 11
+                                            71 5 2 0 0 0 0 0
+                                            0 41 0 0 0 0 0 0
+                                            0)))
   ;; Bad byte in member size
-  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 32 0 0 0 0 0 0 0)))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0
+                                            128 157 97 211 29 7 5 127
+                                            255 248 129 32 0 244 153 11
+                                            71 5 0 0 0 0 0 0
+                                            0 32 0 0 0 0 0 0
+                                            0)))
   ;; Trailing data
-  (is (equalp #(1 2 3 4 5) (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0 9 8 7 6 5 4 3 2 1 0))))
-  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248 129 32 0 244 153 11 71 5 0 0 0 0 0 0 0 41 0 0 0 0 0 0 0 9 8 7 6 5 4 3 2 1 0) :ignore-trailing nil))
+  (is (equalp #(1 2 3 4 5) (decompress-buffer #(76 90 73 80 1 12 0 0
+                                                128 157 97 211 29 7 5 127
+                                                255 248 129 32 0 244 153 11
+                                                71 5 0 0 0 0 0 0
+                                                0 41 0 0 0 0 0 0
+                                                0 9 8 7 6 5 4 3
+                                                2 1 0))))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0
+                                            128 157 97 211 29 7 5 127
+                                            255 248 129 32 0 244 153 11
+                                            71 5 0 0 0 0 0 0
+                                            0 41 0 0 0 0 0 0
+                                            0 9 8 7 6 5 4 3
+                                            2 1 0)
+                                          :ignore-trailing nil))
+  ;; Trailing bad header
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0
+                                            128 157 97 211 29 7 5 127
+                                            255 248 129 32 0 244 153 11
+                                            71 5 0 0 0 0 0 0
+                                            0 41 0 0 0 0 0 0
+                                            0 76 90 0 80 1 12 0
+                                            0 0 0 0 0 0 0)))
+  (is (equalp #(1 2 3 4 5) (decompress-buffer #(76 90 73 80 1 12 0 0
+                                                128 157 97 211 29 7 5 127
+                                                255 248 129 32 0 244 153 11
+                                                71 5 0 0 0 0 0 0
+                                                0 41 0 0 0 0 0 0
+                                                0 76 90 0 80 1 12 0
+                                                0 0 0 0 0 0 0)
+                                              :loose-trailing t)))
   ;; Incomplete stream
-  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0 128 157 97 211 29 7 5 127 255 248))))
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0
+                                            128 157 97 211 29 7 5 127
+                                            255 248))))
 
 
 (test compress-stream
@@ -104,13 +194,15 @@
                   (with-octet-input-stream (input #(1 2 3 4 5))
                     (compress-stream input pipe)
                     (decompress-stream pipe output))))))
-  (let ((tmp (with-octet-output-stream (output)
+  (let* ((data (make-array 100000
+                           :element-type '(unsigned-byte 8)
+                           :initial-element 115))
+         (tmp (with-octet-output-stream (output)
                 (with-octet-pipe (pipe)
-                  (with-octet-input-stream (input (make-array 100000 :element-type '(unsigned-byte 8) :initial-element 115))
+                  (with-octet-input-stream (input data)
                     (compress-stream input pipe)
                     (decompress-stream pipe output))))))
-    (is (= 100000 (length tmp)))
-    (is-true (every (lambda (x) (= x 115)) tmp))))
+    (is (equalp data tmp))))
 
 (test compress-file
   (let ((decompressed (data-file-path "test.txt"))
