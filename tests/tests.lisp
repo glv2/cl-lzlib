@@ -227,3 +227,39 @@
          (tmp-2 (decompress-buffer tmp-1)))
     (is (< (length tmp-1) (length decompressed)))
     (is-false (mismatch decompressed tmp-2))))
+
+(test compression-options
+  ;; Missing compression options
+  (signals lzlib-error (compress-buffer #(7 6 6 7 6 6)
+                                        :level nil))
+  ;; Invalid compression level
+  (signals lzlib-error (compress-buffer #(7 6 6 7 6 6)
+                                        :level 15))
+  ;; Dictionary size too small
+  (signals lzlib-error (compress-buffer #(7 6 6 7 6 6)
+                                        :dictionary-size 3
+                                        :match-len-limit 10))
+  ;; Dictionary size too big
+  (signals lzlib-error (compress-buffer #(7 6 6 7 6 6)
+                                        :dictionary-size 1073741824
+                                        :match-len-limit 10))
+  ;; Match length limit too small
+  (signals lzlib-error (compress-buffer #(7 6 6 7 6 6)
+                                        :dictionary-size 2097152
+                                        :match-len-limit 1))
+  ;; Match length limit too big
+  (signals lzlib-error (compress-buffer #(7 6 6 7 6 6)
+                                        :dictionary-size 2097152
+                                        :match-len-limit 1000))
+  ;; Missing match length limit
+  (signals lzlib-error (compress-buffer #(7 6 6 7 6 6)
+                                        :dictionary-size 2097152))
+  ;; Missing dictionary size
+  (signals lzlib-error (compress-buffer #(7 6 6 7 6 6)
+                                        :match-len-limit 10))
+  ;; Member size to small
+  (signals lzlib-error (compress-buffer #(7 6 6 7 6 6)
+                                        :member-size 10))
+  ;; Member size to big
+  (signals lzlib-error (compress-buffer #(7 6 6 7 6 6)
+                                        :member-size 18446744073709551616)))
