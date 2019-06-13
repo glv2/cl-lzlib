@@ -85,15 +85,27 @@ write the result to the OUTPUT octet stream."
     ((and match-len-limit (not dictionary-size))
      (lz-error "DICTIONARY-SIZE is not set."))
     ((and dictionary-size match-len-limit)
-     (assert (<= (lz-min-dictionary-size)
-                 dictionary-size
-                 (lz-max-dictionary-size)))
-     (assert (<= (lz-min-match-len-limit)
-                 match-len-limit
-                 (lz-max-match-len-limit)))
-     (list dictionary-size match-len-limit))
+     (let ((min-dictionary-size (lz-min-dictionary-size))
+           (max-dictionary-size (lz-max-dictionary-size))
+           (min-match-len-limit (lz-min-match-len-limit))
+           (max-match-len-limit (lz-max-match-len-limit)))
+       (unless (and (integerp dictionary-size)
+                    (<= min-dictionary-size
+                        dictionary-size
+                        max-dictionary-size))
+         (lz-error "DICTIONARY-SIZE must be between ~d and ~d."
+                   min-dictionary-size
+                   max-dictionary-size))
+       (unless (and (integerp match-len-limit)
+                    (<= min-match-len-limit
+                        match-len-limit
+                        max-match-len-limit))
+         (lz-error "MATCH-LEN-LIMIT must be between ~d and ~d."
+                   min-match-len-limit
+                   max-match-len-limit))
+       (list dictionary-size match-len-limit)))
     (level
-     (ecase level
+     (case level
        ((0) '(65535 16))
        ((1) '(1048576 5))
        ((2) '(1572864 6))
@@ -103,14 +115,17 @@ write the result to the OUTPUT octet stream."
        ((6) '(8388608 36))
        ((7) '(16777216 68))
        ((8) '(25165824 132))
-       ((9) '(33554432 273))))
+       ((9) '(33554432 273))
+       (t (lz-error "LEVEL must be between 0 and 9."))))
     (t
      (lz-error "Either LEVEL or DICTIONARY-SIZE and MATCH-LEN-LIMIT must be set."))))
 
 (defun compress-stream (input output &key (level 6) (member-size 2251799813685248) dictionary-size match-len-limit)
   "Read the data from the INPUT octet stream, compress it, and write the result
 to the OUTPUT octet stream."
-  (assert (<= 0 member-size #x7fffffffffffffff))
+  (unless (and (integerp member-size)
+               (<= 100000 member-size 2251799813685248))
+    (lz-error "MEMBER-SIZE must be bewteen 100000 and 2251799813685248."))
   (destructuring-bind (dictionary-size match-len-limit)
       (lzma-options level dictionary-size match-len-limit)
     (let ((encoder (lz-compress-open dictionary-size match-len-limit member-size)))
