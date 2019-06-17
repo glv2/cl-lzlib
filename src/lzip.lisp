@@ -9,14 +9,7 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defconstant +buffer-size+ 65536))
 
-(deftype u8 ()
-  '(unsigned-byte 8))
-
-(deftype i32 ()
-  '(signed-byte 32))
-
-(deftype u64 ()
-  '(unsigned-byte 64))
+(deftype u8 () '(unsigned-byte 8))
 
 
 ;;;
@@ -47,19 +40,19 @@ write the result to the OUTPUT octet stream."
         (let ((in-size 0)
               (out-size 0))
           (declare (type i32 in-size out-size))
-          (loop for max-in-size = (the i32 (lz-compress-write-size encoder))
+          (loop for max-in-size = (lz-compress-write-size encoder)
                 while (plusp max-in-size)
                 do (let* ((size (min max-in-size #.+buffer-size+))
                           (rd (read-sequence buffer input :end size)))
                      (declare (type (integer 0 #.+buffer-size+) size rd))
                      (when (plusp rd)
-                       (when (/= rd (the i32 (lz-compress-write encoder ffi-buffer rd)))
+                       (unless (= rd (lz-compress-write encoder ffi-buffer rd))
                          (lz-error "Library error (LZ-COMPRESS-WRITE).")))
                      (when (< rd size)
                        (lz-compress-finish encoder))
                      (incf in-size rd)))
 
-          (setf out-size (the i32 (lz-compress-read encoder ffi-buffer #.+buffer-size+)))
+          (setf out-size (lz-compress-read encoder ffi-buffer #.+buffer-size+))
           (cond
             ((minusp out-size)
              (let ((msg (lz-strerror (lz-compress-errno encoder))))
@@ -69,10 +62,10 @@ write the result to the OUTPUT octet stream."
             ((zerop in-size)
              (lz-error "Library error (LZ-COMPRESS-READ).")))
 
-          (unless (zerop (the i32 (lz-compress-member-finished encoder)))
-            (when (= 1 (the i32 (lz-compress-finished encoder)))
+          (unless (zerop (lz-compress-member-finished encoder))
+            (when (= 1 (lz-compress-finished encoder))
               (return))
-            (when (minusp (the i32 (lz-compress-restart-member encoder member-size)))
+            (when (minusp (lz-compress-restart-member encoder member-size))
               (let ((msg (lz-strerror (lz-compress-errno encoder))))
                 (lz-error "LZ-COMPRESS-RESTART-MEMBER error: ~a." msg))))))))
   t)
@@ -175,7 +168,7 @@ write the result to the OUTPUT octet stream."
         (buffer (cffi:make-shareable-byte-vector #.+buffer-size+)))
     (cffi:with-pointer-to-vector-data (ffi-buffer buffer)
       (loop do
-        (let ((max-in-size (min (the i32 (lz-decompress-write-size decoder))
+        (let ((max-in-size (min (lz-decompress-write-size decoder)
                                 #.+buffer-size+))
               (in-size 0)
               (out-size 0))
@@ -183,8 +176,8 @@ write the result to the OUTPUT octet stream."
           (when (plusp max-in-size)
             (setf in-size (read-sequence buffer input :end max-in-size))
             (when (plusp in-size)
-              (when (/= (the i32 (lz-decompress-write decoder ffi-buffer in-size))
-                        in-size)
+              (unless (= in-size
+                         (lz-decompress-write decoder ffi-buffer in-size))
                 (lz-error "Library error (LZ-DECOMPRESS-WRITE).")))
             (when (< in-size max-in-size)
               (lz-decompress-finish decoder)))
@@ -199,7 +192,7 @@ write the result to the OUTPUT octet stream."
                 ((minusp rd)
                  (setf out-size rd)
                  (return)))
-              (when (= 1 (the i32 (lz-decompress-member-finished decoder)))
+              (when (= 1 (lz-decompress-member-finished decoder))
                 (setf first-member nil))
               (unless (plusp rd)
                 (return))))
@@ -248,7 +241,7 @@ write the result to the OUTPUT octet stream."
                     (lz-error "File ends unexpectedly at pos ~d." pos)
                     (lz-error "Decoder error ar pos ~d." pos)))))
 
-          (when (= 1 (the i32 (lz-decompress-finished decoder)))
+          (when (= 1 (lz-decompress-finished decoder))
             (return))
           (when (and (zerop in-size) (zerop out-size))
             (lz-error "Library error (stalled)."))))))
