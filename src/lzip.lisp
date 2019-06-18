@@ -121,15 +121,18 @@ to the OUTPUT octet stream."
     (lz-error "MEMBER-SIZE must be bewteen 100000 and 2251799813685248."))
   (destructuring-bind (dictionary-size match-len-limit)
       (lzma-options level dictionary-size match-len-limit)
-    (let ((encoder (lz-compress-open dictionary-size match-len-limit member-size)))
+    (let* ((encoder (lz-compress-open dictionary-size match-len-limit member-size))
+           (errno (if (cffi:null-pointer-p encoder)
+                      +lz-mem-error+
+                      (lz-compress-errno encoder))))
       (unwind-protect
-           (if (or (cffi:null-pointer-p encoder)
-                   (/= (lz-compress-errno encoder) +lz-ok+))
-               (if (or (cffi:null-pointer-p encoder)
-                       (= (lz-compress-errno encoder) +lz-mem-error+))
-                   (lz-error "Not enough memory. Try a smaller dictionary size.")
-                   (lz-error "Invalid argument to encoder."))
-               (compress encoder input output member-size))
+           (case errno
+             ((#.+lz-ok+)
+              (compress encoder input output member-size))
+             ((#.+lz-mem-error+)
+              (lz-error "Not enough memory. Try a smaller dictionary size."))
+             (t
+              (lz-error "Invalid argument to encoder.")))
         (lz-compress-close encoder)))))
 
 (defun compress-file (input output &key (level 6) (member-size 2251799813685248) dictionary-size match-len-limit)
@@ -250,12 +253,16 @@ write the result to the OUTPUT octet stream."
 (defun decompress-stream (input output &key (ignore-trailing t) loose-trailing)
   "Read the data from the INPUT octet stream, decompress it, and write the
 result to the OUTPUT octet stream."
-  (let ((decoder (lz-decompress-open)))
+  (let* ((decoder (lz-decompress-open))
+         (errno (if (cffi:null-pointer-p decoder)
+                    +lz-mem-error+
+                    (lz-decompress-errno decoder))))
     (unwind-protect
-         (if (or (cffi:null-pointer-p decoder)
-                 (/= (lz-decompress-errno decoder) +lz-ok+))
-             (lz-error "Not enough memory.")
-             (decompress decoder input output ignore-trailing loose-trailing))
+         (case errno
+           ((#.+lz-ok+)
+            (decompress decoder input output ignore-trailing loose-trailing))
+           (t
+            (lz-error "Not enough memory.")))
       (lz-decompress-close decoder))))
 
 (defun decompress-file (input output &key (ignore-trailing t) loose-trailing)
