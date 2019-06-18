@@ -81,9 +81,11 @@
   (let ((decompressed (data-file-path "test.txt"))
         (compressed (data-file-path "test.txt.lz"))
         (tmp "/tmp/lzlib-test.txt"))
-    (is-true (decompress-file compressed tmp))
-    (is (same-files-p decompressed tmp))
-    (uiop:delete-file-if-exists tmp)))
+    (unwind-protect
+         (progn
+           (is-true (decompress-file compressed tmp))
+           (is (same-files-p decompressed tmp)))
+      (uiop:delete-file-if-exists tmp))))
 
 (test decompress-buffer
   (let ((decompressed (load-data-file "test.txt"))
@@ -208,11 +210,13 @@
   (let ((decompressed (data-file-path "test.txt"))
         (tmp-1 "/tmp/lzlib-test.txt.lz")
         (tmp-2 "/tmp/lzlib-test.txt"))
-    (is-true (compress-file decompressed tmp-1))
-    (is-true (decompress-file tmp-1 tmp-2))
-    (is (same-files-p decompressed tmp-2))
-    (uiop:delete-file-if-exists tmp-1)
-    (uiop:delete-file-if-exists tmp-2)))
+    (unwind-protect
+         (progn
+           (is-true (compress-file decompressed tmp-1))
+           (is-true (decompress-file tmp-1 tmp-2))
+           (is (same-files-p decompressed tmp-2)))
+      (uiop:delete-file-if-exists tmp-1)
+      (uiop:delete-file-if-exists tmp-2))))
 
 (test compress-buffer
   (let* ((decompressed (load-data-file "test.txt"))
