@@ -200,49 +200,50 @@ write the result to the OUTPUT octet stream."
               (unless (plusp rd)
                 (return))))
 
-          (when (or (minusp out-size) (and first-member (zerop out-size)))
+          (when (or (minusp out-size) (and (zerop out-size) first-member))
             (let ((member-pos (lz-decompress-member-position decoder))
-                  (lz-errno (lz-decompress-errno decoder)))
-              (declare (type u64 member-pos)
-                       (type i32 lz-errno))
-              (when (= lz-errno +lz-library-error+)
-                (lz-error "Library error (LZ-DECOMPRESS-READ)."))
-              (when (<= member-pos 6)
-                (cond
-                  ((= lz-errno +lz-unexpected-eof+)
-                   (if first-member
-                       (lz-error "File ends unexpectedly at member header.")
-                       (lz-error "Truncated header in multimember file.")))
-                  ((= lz-errno +lz-data-error+)
-                   (cond
-                     ((= member-pos 4)
-                      (let ((version (lz-decompress-member-version decoder)))
-                        (lz-error "Version ~d member format not supported." version)))
-                     ((= member-pos 5)
-                      (lz-error "Invalid dictionary size in member header."))
-                     (first-member
-                      (lz-error "Bad version or dictionary size in member header."))
-                     ((not loose-trailing)
-                      (lz-error "Corrupt header in multimember file."))
-                     ((not ignore-trailing)
-                      (lz-error "Trailing data not allowed."))
-                     (t
-                      (return))))))
-              (when (= lz-errno +lz-header-error+)
-                (cond
-                  (first-member
-                   (lz-error "Bad magic number (file not in lzip format)."))
-                  ((not ignore-trailing)
-                   (lz-error "Trailing data not allowed."))
-                  (t
-                   (return))))
-              (when (= lz-errno +lz-mem-error+)
-                (lz-error "Not enough memory."))
-              (let ((pos (lz-decompress-total-in-size decoder)))
-                (declare (type u64 pos))
-                (if (= lz-errno +lz-unexpected-eof+)
-                    (lz-error "File ends unexpectedly at pos ~d." pos)
-                    (lz-error "Decoder error ar pos ~d." pos)))))
+                  (pos (lz-decompress-total-in-size decoder)))
+              (declare (type u64 member-pos pos))
+              (case (lz-decompress-errno decoder)
+                ((#.+lz-library-error+)
+                 (lz-error "Library error (LZ-DECOMPRESS-READ)."))
+                ((#.+lz-header-error+)
+                 (cond
+                   (first-member
+                    (lz-error "Bad magic number (file not in lzip format)."))
+                   ((not ignore-trailing)
+                    (lz-error "Trailing data not allowed."))
+                   (t
+                    (return))))
+                ((#.+lz-mem-error+)
+                 (lz-error "Not enough memory."))
+                ((#.+lz-unexpected-eof+)
+                 (cond
+                   ((> member-pos 6)
+                    (lz-error "File ends unexpectedly at position ~d." pos))
+                   (first-member
+                    (lz-error "File ends unexpectedly at member header."))
+                   (t
+                    (lz-error "Truncated header in multimember file."))))
+                ((#.+lz-data-error+)
+                 (cond
+                   ((> member-pos 6)
+                    (lz-error "Decoder error at position ~d." pos))
+                   ((= member-pos 4)
+                    (lz-error "Version ~d member format not supported."
+                              (lz-decompress-member-version decoder)))
+                   ((= member-pos 5)
+                    (lz-error "Invalid dictionary size in member header."))
+                   (first-member
+                    (lz-error "Bad version or dictionary size in member header."))
+                   ((not loose-trailing)
+                    (lz-error "Corrupt header in multimember file."))
+                   ((not ignore-trailing)
+                    (lz-error "Trailing data not allowed."))
+                   (t
+                    (return))))
+                (t
+                 (lz-error "Decoder error at position ~d." pos)))))
 
           (when (= 1 (lz-decompress-finished decoder))
             (return))
