@@ -255,7 +255,7 @@
     (is (< (length tmp-1) (length decompressed)))
     (is-false (mismatch decompressed tmp-2))))
 
-(test bad-compression-options
+(test compress-bad-options
   ;; Missing compression options
   (signals lzlib-error (compress-buffer #(7 6 6 7 6 6)
                                         :level nil))
