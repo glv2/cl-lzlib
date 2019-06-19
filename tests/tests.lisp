@@ -85,6 +85,14 @@
          (progn
            (is-true (decompress-file compressed tmp))
            (is (same-files-p decompressed tmp)))
+      (uiop:delete-file-if-exists tmp)))
+  (let ((decompressed (data-file-path "test-multimember.dat"))
+        (compressed (data-file-path "test-multimember.dat.lz"))
+        (tmp "/tmp/lzlib-multimember.dat"))
+    (unwind-protect
+         (progn
+           (is-true (decompress-file compressed tmp))
+           (is (same-files-p decompressed tmp)))
       (uiop:delete-file-if-exists tmp))))
 
 (test decompress-buffer
@@ -96,7 +104,9 @@
                                                 255 248 129 32 0 244 153 11
                                                 71 5 0 0 0 0 0 0
                                                 0 41 0 0 0 0 0 0
-                                                0))))
+                                                0)))))
+
+(test decompress-corrupt-header
   ;; No header
   (signals lzlib-error (decompress-buffer #()))
   ;; Bad header
@@ -116,7 +126,9 @@
                                             255 248 129 32 0 244 153 11
                                             71 5 0 0 0 0 0 0
                                             0 41 0 0 0 0 0 0
-                                            0)))
+                                            0))))
+
+(test decompress-corrupt-data
   ;; Bad byte in LZMA stream
   (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0
                                             128 157 14 211 29 7 5 127
@@ -145,6 +157,12 @@
                                             71 5 0 0 0 0 0 0
                                             0 32 0 0 0 0 0 0
                                             0)))
+  ;; Incomplete stream
+  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0
+                                            128 157 97 211 29 7 5 127
+                                            255 248))))
+
+(test decompress-trailing-data
   ;; Trailing data
   (is (equalp #(1 2 3 4 5) (decompress-buffer #(76 90 73 80 1 12 0 0
                                                 128 157 97 211 29 7 5 127
@@ -176,12 +194,7 @@
                                                 0 41 0 0 0 0 0 0
                                                 0 76 90 0 80 1 12 0
                                                 0 0 0 0 0 0 0)
-                                              :loose-trailing t)))
-  ;; Incomplete stream
-  (signals lzlib-error (decompress-buffer #(76 90 73 80 1 12 0 0
-                                            128 157 97 211 29 7 5 127
-                                            255 248))))
-
+                                              :loose-trailing t))))
 
 (test compress-stream
   (is (equalp #()
@@ -216,6 +229,16 @@
            (is-true (decompress-file tmp-1 tmp-2))
            (is (same-files-p decompressed tmp-2)))
       (uiop:delete-file-if-exists tmp-1)
+      (uiop:delete-file-if-exists tmp-2)))
+  (let ((decompressed (data-file-path "test-multimember.dat"))
+        (tmp-1 "/tmp/test-multimember.dat.lz")
+        (tmp-2 "/tmp/test-multimember.dat"))
+    (unwind-protect
+         (progn
+           (is-true (compress-file decompressed tmp-1 :member-size 100000))
+           (is-true (decompress-file tmp-1 tmp-2))
+           (is (same-files-p decompressed tmp-2)))
+      (uiop:delete-file-if-exists tmp-1)
       (uiop:delete-file-if-exists tmp-2))))
 
 (test compress-buffer
@@ -232,7 +255,7 @@
     (is (< (length tmp-1) (length decompressed)))
     (is-false (mismatch decompressed tmp-2))))
 
-(test compression-options
+(test bad-compression-options
   ;; Missing compression options
   (signals lzlib-error (compress-buffer #(7 6 6 7 6 6)
                                         :level nil))
