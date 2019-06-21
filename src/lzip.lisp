@@ -195,8 +195,8 @@ and return the resulting octet vector."
 ;;;
 
 (defun decompress (decoder input output ignore-trailing loose-trailing)
-  "Read the data from the INPUT octet stream, decompress itwith the DECODER, and
-write the result to the OUTPUT octet stream."
+  "Read the data from the INPUT octet stream, decompress it with the DECODER,
+and write the result to the OUTPUT octet stream."
   (declare (optimize (speed 3) (space 0) (debug 0) (safety 1)))
   (let ((buffer (cffi:make-shareable-byte-vector #.+buffer-size+)))
     (declare (dynamic-extent buffer))
