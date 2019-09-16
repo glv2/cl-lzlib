@@ -13,8 +13,8 @@ using bindings to the lzlib C library.
 
 * License
 
-*cl-lzlib* is released under the GPL-3 license. See the [[file:LICENSE][LICENSE]] file for
-details.
+*cl-lzlib* is released under the GPL-3 license or later. See the [[file:LICENSE][LICENSE]] file
+for details.
 
 * Dependencies
 
