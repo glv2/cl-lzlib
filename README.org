@@ -56,23 +56,26 @@ The compression can be customized using serveral parameters:
    default level is 6, which sets /dictionary-size/ to 8 MiB and
    /match-len-limit/ to 36. /level/ must be between 0 (fast encoder) and
    9 (strong compression).
+ - When the /threads/ parameter is greater than 1, the data is read by blocks
+   of /block-size/ bytes and the blocks are compressed in parallel. The default
+   block size is the double of the dictionary size.
 
 #+BEGIN_SRC lisp
-(compress-stream input output &key threads level member-size dictionary-size match-len-limit) => t
+(compress-stream input output &key threads level member-size block-size dictionary-size match-len-limit) => t
 #+END_SRC
 
 Read the data from the /input/ octet stream, compress it, and write the result
 to the /output/ octet stream.
 
 #+BEGIN_SRC lisp
-(compress-file input output &key threads level member-size dictionary-size match-len-limit) => t
+(compress-file input output &key threads level member-size block-size dictionary-size match-len-limit) => t
 #+END_SRC
 
 Read the data from the /input/ file, compress it, and write the result to the
 /output/ file.
 
 #+BEGIN_SRC lisp
-(compress-buffer buffer &key start end threads level member-size dictionary-size match-len-limit) => bytes
+(compress-buffer buffer &key start end threads level member-size block-size dictionary-size match-len-limit) => bytes
 #+END_SRC
 
 Read the data between the /start/ and /end/ offsets in the /buffer/, compress

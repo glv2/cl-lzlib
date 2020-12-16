@@ -255,7 +255,7 @@
          (progn
            (is-true (compress-file decompressed tmp-1
                                    :threads 2
-                                   :member-size 100000))
+                                   :block-size 100000))
            (is-true (decompress-file tmp-1 tmp-2))
            (is (same-files-p decompressed tmp-2)))
       (uiop:delete-file-if-exists tmp-1)

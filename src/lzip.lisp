@@ -162,8 +162,8 @@ to the OUTPUT octet stream."
 
 (defun compress-stream-n (input output
                           &key
-                            (threads 2) (level 6) member-size
-                            dictionary-size match-len-limit)
+                            (threads 2) (level 6) (member-size 2251799813685248)
+                            block-size dictionary-size match-len-limit)
   "Read the data from the INPUT octet stream, compress it using multiple
 threads, and write the result to the OUTPUT octet stream."
   (destructuring-bind (dictionary-size match-len-limit)
@@ -171,7 +171,7 @@ threads, and write the result to the OUTPUT octet stream."
     (let ((lparallel:*kernel* (lparallel:make-kernel threads))
           (queue (lparallel.queue:make-queue))
           (buffer (make-array +buffer-size+ :element-type 'u8))
-          (member-size (or member-size (* 2 dictionary-size))))
+          (block-size (or block-size (* 2 dictionary-size))))
       (labels ((read-block (size pipe first-read-p)
                  (let ((n (read-sequence buffer input
                                          :end (min size +buffer-size+))))
@@ -192,7 +192,7 @@ threads, and write the result to the OUTPUT octet stream."
                    (close pipe)))
                (add-task ()
                  (let ((pipe (octet-streams:make-octet-pipe)))
-                   (if (read-block member-size pipe t)
+                   (if (read-block block-size pipe t)
                        (let ((task (lparallel:future (compress-block pipe))))
                          (lparallel.queue:push-queue task queue))
                        (close pipe))))
@@ -215,7 +215,7 @@ threads, and write the result to the OUTPUT octet stream."
 (defun compress-stream (input output
                         &key
                           (threads 1) (level 6) (member-size 2251799813685248)
-                          dictionary-size match-len-limit)
+                          block-size dictionary-size match-len-limit)
   "Read the data from the INPUT octet stream, compress it, and write the result
 to the OUTPUT octet stream."
   (if (< threads 2)
@@ -227,19 +227,15 @@ to the OUTPUT octet stream."
       (compress-stream-n input output
                          :threads threads
                          :level level
-                         ;; If a member size different from the default one is
-                         ;; specified, use it. Otherwise the default of twice
-                         ;; the dictionary size will be used.
-                         :member-size (if (/= member-size 2251799813685248)
-                                          member-size
-                                          nil)
+                         :member-size member-size
+                         :block-size block-size
                          :dictionary-size dictionary-size
                          :match-len-limit match-len-limit)))
 
 (defun compress-file (input output
                       &key
                         (threads 1) (level 6) (member-size 2251799813685248)
-                        dictionary-size match-len-limit)
+                        block-size dictionary-size match-len-limit)
   "Read the data from the INPUT file, compress it, and write the result to the
 OUTPUT file."
   (with-open-file (input-stream input :element-type 'u8)
@@ -248,6 +244,7 @@ OUTPUT file."
                        :threads threads
                        :level level
                        :member-size member-size
+                       :block-size block-size
                        :dictionary-size dictionary-size
                        :match-len-limit match-len-limit))))
 
@@ -255,7 +252,7 @@ OUTPUT file."
                         &key
                           (start 0) end (threads 1) (level 6)
                           (member-size 2251799813685248)
-                          dictionary-size match-len-limit)
+                          block-size dictionary-size match-len-limit)
   "Read the data between the START and END offsets in the BUFFER, compress it,
 and return the resulting octet vector."
   (let ((end (or end (length buffer))))
@@ -265,6 +262,7 @@ and return the resulting octet vector."
                          :threads threads
                          :level level
                          :member-size member-size
+                         :block-size block-size
                          :dictionary-size dictionary-size
                          :match-len-limit match-len-limit)))))
 
