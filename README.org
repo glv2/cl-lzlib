@@ -1,6 +1,6 @@
 #+TITLE: cl-lzlib
 #+AUTHOR: Guillaume LE VAILLANT
-#+DATE: 2019-06-02
+#+DATE: 2020-12-16
 #+EMAIL: glv@posteo.net
 #+LANGUAGE: en
 #+OPTIONS: num:nil toc:nil html-postamble:nil html-scripts:nil
@@ -57,21 +57,21 @@ The compression can be customized using serveral parameters:
    9 (strong compression).
 
 #+BEGIN_SRC lisp
-(compress-stream input output &key level member-size dictionary-size match-len-limit) => t
+(compress-stream input output &key threads level member-size dictionary-size match-len-limit) => t
 #+END_SRC
 
 Read the data from the /input/ octet stream, compress it, and write the result
 to the /output/ octet stream.
 
 #+BEGIN_SRC lisp
-(compress-file input output &key level member-size dictionary-size match-len-limit) => t
+(compress-file input output &key threads level member-size dictionary-size match-len-limit) => t
 #+END_SRC
 
 Read the data from the /input/ file, compress it, and write the result to the
 /output/ file.
 
 #+BEGIN_SRC lisp
-(compress-buffer (buffer &key start end level member-size dictionary-size match-len-limit) => bytes
+(compress-buffer buffer &key start end threads level member-size dictionary-size match-len-limit) => bytes
 #+END_SRC
 
 Read the data between the /start/ and /end/ offsets in the /buffer/, compress
@@ -87,21 +87,21 @@ The decompression can be customized using serveral parameters:
    data will be ignored.
 
 #+BEGIN_SRC lisp
-(decompress-stream input output &key ignore-trailing loose-trailing) => t
+(decompress-stream input output &key threads ignore-trailing loose-trailing) => t
 #+END_SRC
 
 Read the data from the /input/ octet stream, decompress it, and write the result
 to the /output/ octet stream.
 
 #+BEGIN_SRC lisp
-(decompress-file input output &key ignore-trailing loose-trailing) => t
+(decompress-file input output &key threads ignore-trailing loose-trailing) => t
 #+END_SRC
 
 Read the data from the /input/ file, decompress it, and write the result to the
 /output/ file.
 
 #+BEGIN_SRC lisp
-(decompress-buffer buffer &key start end ignore-trailing loose-trailing) => bytes
+(decompress-buffer buffer &key start end threads ignore-trailing loose-trailing) => bytes
 #+END_SRC
 
 Read the data between the /start/ and /end/ offsets in the /buffer/, decompress

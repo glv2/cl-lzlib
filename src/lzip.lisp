@@ -1,5 +1,5 @@
 ;;; This file is part of cl-lzlib
-;;; Copyright 2019 Guillaume LE VAILLANT
+;;; Copyright 2019-2020 Guillaume LE VAILLANT
 ;;; Distributed under the GNU GPL v3 or later.
 ;;; See the file LICENSE for terms of use and distribution.
 
@@ -131,10 +131,10 @@ write the result to the OUTPUT octet stream."
     (t
      (lz-error "Either LEVEL or DICTIONARY-SIZE and MATCH-LEN-LIMIT must be set."))))
 
-(defun compress-stream (input output
-                        &key
-                          (level 6) (member-size 2251799813685248)
-                          dictionary-size match-len-limit)
+(defun compress-stream-1 (input output
+                          &key
+                            (level 6) (member-size 2251799813685248)
+                            dictionary-size match-len-limit)
   "Read the data from the INPUT octet stream, compress it, and write the result
 to the OUTPUT octet stream."
   (cond
@@ -160,15 +160,84 @@ to the OUTPUT octet stream."
                  (lz-error "Invalid argument to encoder.")))
            (lz-compress-close encoder)))))))
 
+(defun compress-stream-n (input output
+                          &key
+                            (threads 2) (level 6) member-size
+                            dictionary-size match-len-limit)
+  "Read the data from the INPUT octet stream, compress it using multiple
+threads, and write the result to the OUTPUT octet stream."
+  (destructuring-bind (dictionary-size match-len-limit)
+      (lzma-options level dictionary-size match-len-limit)
+    (let ((lparallel:*kernel* (lparallel:make-kernel threads))
+          (queue (lparallel.queue:make-queue))
+          (member-size (or member-size (* 2 dictionary-size))))
+      (labels ((read-block ()
+                 (let* ((data (make-array member-size :element-type 'u8))
+                        (size (read-sequence data input)))
+                   (list data size)))
+               (compress-block (data size)
+                 (octet-streams:with-octet-output-stream (output)
+                   (octet-streams:with-octet-input-stream (input data 0 size)
+                     (compress-stream-1 input output
+                                        :level level
+                                        :member-size member-size
+                                        :dictionary-size dictionary-size
+                                        :match-len-limit match-len-limit))))
+               (add-task ()
+                 (destructuring-bind (data size) (read-block)
+                   (when (plusp size)
+                     (let ((task (lparallel:future (compress-block data size))))
+                       (lparallel.queue:push-queue task queue)))))
+               (process-queue ()
+                 (unless (lparallel.queue:queue-empty-p queue)
+                   (let* ((task (lparallel.queue:pop-queue queue))
+                          (compressed-data (lparallel:force task)))
+                     (write-sequence compressed-data output))
+                   (add-task)
+                   (process-queue))))
+        (unwind-protect
+             (lparallel:task-handler-bind ((error (lambda (e)
+                                                    (error e))))
+               (dotimes (i threads)
+                 (add-task))
+               (process-queue)
+               t)
+          (lparallel:end-kernel))))))
+
+(defun compress-stream (input output
+                        &key
+                          (threads 1) (level 6) (member-size 2251799813685248)
+                          dictionary-size match-len-limit)
+  "Read the data from the INPUT octet stream, compress it, and write the result
+to the OUTPUT octet stream."
+  (if (< threads 2)
+      (compress-stream-1 input output
+                         :level level
+                         :member-size member-size
+                         :dictionary-size dictionary-size
+                         :match-len-limit match-len-limit)
+      (compress-stream-n input output
+                         :threads threads
+                         :level level
+                         ;; If a member size different from the default one is
+                         ;; specified, use it. Otherwise the default of twice
+                         ;; the dictionary size will be used.
+                         :member-size (if (/= member-size 2251799813685248)
+                                          member-size
+                                          nil)
+                         :dictionary-size dictionary-size
+                         :match-len-limit match-len-limit)))
+
 (defun compress-file (input output
                       &key
-                        (level 6) (member-size 2251799813685248)
+                        (threads 1) (level 6) (member-size 2251799813685248)
                         dictionary-size match-len-limit)
   "Read the data from the INPUT file, compress it, and write the result to the
 OUTPUT file."
   (with-open-file (input-stream input :element-type 'u8)
     (with-open-file (output-stream output :direction :output :element-type 'u8)
       (compress-stream input-stream output-stream
+                       :threads threads
                        :level level
                        :member-size member-size
                        :dictionary-size dictionary-size
@@ -176,7 +245,8 @@ OUTPUT file."
 
 (defun compress-buffer (buffer
                         &key
-                          (start 0) end (level 6) (member-size 2251799813685248)
+                          (start 0) end (threads 1) (level 6)
+                          (member-size 2251799813685248)
                           dictionary-size match-len-limit)
   "Read the data between the START and END offsets in the BUFFER, compress it,
 and return the resulting octet vector."
@@ -184,6 +254,7 @@ and return the resulting octet vector."
     (octet-streams:with-octet-output-stream (output)
       (octet-streams:with-octet-input-stream (input buffer start end)
         (compress-stream input output
+                         :threads threads
                          :level level
                          :member-size member-size
                          :dictionary-size dictionary-size
@@ -302,7 +373,9 @@ and write the result to the OUTPUT octet stream."
                         (decompress-data first-member-p)))))))
         (decompress-data t)))))
 
-(defun decompress-stream (input output &key (ignore-trailing t) loose-trailing)
+(defun decompress-stream-1 (input output
+                            &key
+                              (ignore-trailing t) loose-trailing)
   "Read the data from the INPUT octet stream, decompress it, and write the
 result to the OUTPUT octet stream."
   (let* ((decoder (lz-decompress-open))
@@ -317,23 +390,146 @@ result to the OUTPUT octet stream."
             (lz-error "Not enough memory.")))
       (lz-decompress-close decoder))))
 
-(defun decompress-file (input output &key (ignore-trailing t) loose-trailing)
+(defun decompress-stream-n (input output
+                            &key
+                              (threads 2) (ignore-trailing t) loose-trailing)
+  "Read the data from the INPUT octet stream, decompress it using multiple
+threads, and write the result to the OUTPUT octet stream."
+  (let ((lparallel:*kernel* (lparallel:make-kernel threads))
+        (queue (lparallel.queue:make-queue))
+        (buffer (make-array 1048576 :element-type 'u8))
+        (end 0))
+    (labels ((find-magic (buffer start end)
+               (declare (type (simple-array u8 (*)) buffer)
+                        (type fixnum start end)
+                        (optimize (speed 3)))
+               (flet ((jump-size (x)
+                        (declare (type u8 x))
+                        (case x
+                          ((73) 1)
+                          ((76) 3)
+                          ((90) 2)
+                          (t 4))))
+                 (do ((index start
+                             (+ index (jump-size (aref buffer (+ index 3))))))
+                     ((> index (- end 4)) nil)
+                   (when (and (= (aref buffer (+ index 3)) 80)
+                              (= (aref buffer (+ index 2)) 73)
+                              (= (aref buffer (+ index 1)) 90)
+                              (= (aref buffer index) 76))
+                     (return index)))))
+             (read-member-size (buffer start)
+               (logior (aref buffer start)
+                       (ash (aref buffer (+ start 1)) 8)
+                       (ash (aref buffer (+ start 2)) 16)
+                       (ash (aref buffer (+ start 3)) 24)
+                       (ash (aref buffer (+ start 4)) 32)
+                       (ash (aref buffer (+ start 5)) 48)
+                       (ash (aref buffer (+ start 6)) 56)
+                       (ash (aref buffer (+ start 7)) 64)))
+             (read-data (start)
+               (read-sequence buffer input :start start))
+             (decompress-member (pipe)
+               (unwind-protect
+                    (octet-streams:with-octet-output-stream (output)
+                      (decompress-stream-1 pipe output
+                                           :ignore-trailing ignore-trailing
+                                           :loose-trailing loose-trailing))
+                 (close pipe)))
+             (read-member (member-size pipe)
+               (setf end (read-data end))
+               (let ((index (find-magic buffer 0 end)))
+                 (cond
+                   ((and (zerop end) (zerop member-size))
+                    nil)
+                   ((null index)
+                    ;; Continue reading the current member.
+                    (let ((n (- end 8)))
+                      (cond
+                        ((plusp n)
+                         (write-sequence buffer pipe :end n)
+                         (replace buffer buffer :start2 n :end2 end)
+                         (decf end n)
+                         (read-member (+ member-size n) pipe))
+                        (t
+                         ;; End of stream.
+                         (write-sequence buffer pipe :end end)
+                         (setf end 0)
+                         t))))
+                   ((zerop index)
+                    ;; New member.
+                    (write-sequence buffer pipe :end 4)
+                    (replace buffer buffer :start2 4 :end2 end)
+                    (decf end 4)
+                    (read-member 4 pipe))
+                   ((and (>= index 8)
+                         (= (read-member-size buffer (- index 8))
+                            (+ member-size index)))
+                    ;; Finish reading the current member.
+                    (write-sequence buffer pipe :end index)
+                    (replace buffer buffer :start2 index :end2 end)
+                    (decf end index)
+                    t)
+                   (t
+                    (lz-error "Bad member in archive.")))))
+             (add-task ()
+               (let ((pipe (octet-streams:make-octet-pipe)))
+                 (if (read-member 0 pipe)
+                     (let ((task (lparallel:future (decompress-member pipe))))
+                       (lparallel.queue:push-queue task queue))
+                     (close pipe))))
+             (process-queue ()
+               (unless (lparallel.queue:queue-empty-p queue)
+                 (let* ((task (lparallel.queue:pop-queue queue))
+                        (data (lparallel:force task)))
+                   (write-sequence data output))
+                 (add-task)
+                 (process-queue))))
+      (unwind-protect
+           (lparallel:task-handler-bind ((error (lambda (e)
+                                                  (error e))))
+             (dotimes (i threads)
+               (add-task))
+             (process-queue)
+             t)
+        (lparallel:end-kernel)))))
+
+(defun decompress-stream (input output
+                          &key
+                            (threads 1) (ignore-trailing t) loose-trailing)
+  "Read the data from the INPUT octet stream, decompress it, and write the
+result to the OUTPUT octet stream."
+  (if (< threads 2)
+      (decompress-stream-1 input output
+                           :ignore-trailing ignore-trailing
+                           :loose-trailing loose-trailing)
+      (decompress-stream-n input output
+                           :threads threads
+                           :ignore-trailing ignore-trailing
+                           :loose-trailing loose-trailing)))
+
+(defun decompress-file (input output
+                        &key
+                          (threads 1) (ignore-trailing t) loose-trailing)
   "Read the data from the INPUT file, decompress it, and write the result to the
 OUTPUT file."
   (with-open-file (input-stream input :element-type 'u8)
     (with-open-file (output-stream output :direction :output :element-type 'u8)
       (decompress-stream input-stream output-stream
+                         :threads threads
                          :ignore-trailing ignore-trailing
                          :loose-trailing loose-trailing))))
 
 (defun decompress-buffer (buffer
                           &key
-                            (start 0) end (ignore-trailing t) loose-trailing)
+                            (start 0) end (threads 1)
+                            (ignore-trailing t) loose-trailing)
   "Read the data between the START and END offsets in the BUFFER, decompress it,
 and return the resulting octet vector."
   (let ((end (or end (length buffer))))
     (octet-streams:with-octet-output-stream (output)
       (octet-streams:with-octet-input-stream (input buffer start end)
         (decompress-stream input output
+                           :threads threads
                            :ignore-trailing ignore-trailing
                            :loose-trailing loose-trailing)))))

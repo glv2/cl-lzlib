@@ -1,5 +1,5 @@
 ;;; This file is part of cl-lzlib
-;;; Copyright 2019 Guillaume LE VAILLANT
+;;; Copyright 2019-2020 Guillaume LE VAILLANT
 ;;; Distributed under the GNU GPL v3 or later.
 ;;; See the file LICENSE for terms of use and distribution.
 
@@ -92,6 +92,14 @@
     (unwind-protect
          (progn
            (is-true (decompress-file compressed tmp))
+           (is (same-files-p decompressed tmp)))
+      (uiop:delete-file-if-exists tmp)))
+  (let ((decompressed (data-file-path "test-multimember.dat"))
+        (compressed (data-file-path "test-multimember.dat.lz"))
+        (tmp "/tmp/lzlib-multimember.dat"))
+    (unwind-protect
+         (progn
+           (is-true (decompress-file compressed tmp :threads 2))
            (is (same-files-p decompressed tmp)))
       (uiop:delete-file-if-exists tmp))))
 
@@ -236,6 +244,18 @@
     (unwind-protect
          (progn
            (is-true (compress-file decompressed tmp-1 :member-size 100000))
+           (is-true (decompress-file tmp-1 tmp-2))
+           (is (same-files-p decompressed tmp-2)))
+      (uiop:delete-file-if-exists tmp-1)
+      (uiop:delete-file-if-exists tmp-2)))
+  (let ((decompressed (data-file-path "test-multimember.dat"))
+        (tmp-1 "/tmp/test-multimember.dat.lz")
+        (tmp-2 "/tmp/test-multimember.dat"))
+    (unwind-protect
+         (progn
+           (is-true (compress-file decompressed tmp-1
+                                   :threads 2
+                                   :member-size 100000))
            (is-true (decompress-file tmp-1 tmp-2))
            (is (same-files-p decompressed tmp-2)))
       (uiop:delete-file-if-exists tmp-1)
