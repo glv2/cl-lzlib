@@ -170,24 +170,32 @@ threads, and write the result to the OUTPUT octet stream."
       (lzma-options level dictionary-size match-len-limit)
     (let ((lparallel:*kernel* (lparallel:make-kernel threads))
           (queue (lparallel.queue:make-queue))
+          (buffer (make-array +buffer-size+ :element-type 'u8))
           (member-size (or member-size (* 2 dictionary-size))))
-      (labels ((read-block ()
-                 (let* ((data (make-array member-size :element-type 'u8))
-                        (size (read-sequence data input)))
-                   (list data size)))
-               (compress-block (data size)
-                 (octet-streams:with-octet-output-stream (output)
-                   (octet-streams:with-octet-input-stream (input data 0 size)
-                     (compress-stream-1 input output
-                                        :level level
-                                        :member-size member-size
-                                        :dictionary-size dictionary-size
-                                        :match-len-limit match-len-limit))))
+      (labels ((read-block (size pipe first-read-p)
+                 (let ((n (read-sequence buffer input
+                                         :end (min size +buffer-size+))))
+                   (cond
+                     ((zerop n)
+                      (not first-read-p))
+                     (t
+                      (write-sequence buffer pipe :end n)
+                      (read-block (- size n) pipe nil)))))
+               (compress-block (pipe)
+                 (unwind-protect
+                      (octet-streams:with-octet-output-stream (output)
+                        (compress-stream-1 pipe output
+                                           :level level
+                                           :member-size member-size
+                                           :dictionary-size dictionary-size
+                                           :match-len-limit match-len-limit))
+                   (close pipe)))
                (add-task ()
-                 (destructuring-bind (data size) (read-block)
-                   (when (plusp size)
-                     (let ((task (lparallel:future (compress-block data size))))
-                       (lparallel.queue:push-queue task queue)))))
+                 (let ((pipe (octet-streams:make-octet-pipe)))
+                   (if (read-block member-size pipe t)
+                       (let ((task (lparallel:future (compress-block pipe))))
+                         (lparallel.queue:push-queue task queue))
+                       (close pipe))))
                (process-queue ()
                  (unless (lparallel.queue:queue-empty-p queue)
                    (let* ((task (lparallel.queue:pop-queue queue))
