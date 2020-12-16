@@ -21,9 +21,10 @@ for details.
 *cl-lzlib* requires:
  - [[https://common-lisp.net/project/cffi/][cffi]]
  - [[https://github.com/glv2/cl-octet-streams][cl-octet-streams]]
+ - [[https://lparallel.org/][lparallel]]
  - [[https://www.nongnu.org/lzip/lzlib.html][lzlib]]
 
-*cffi* and *cl-octet-streams* can be easily installed with [[https://www.quicklisp.org][quicklisp]].
+*cl-lzlib* can be easily installed with [[https://www.quicklisp.org][quicklisp]].
 
 A *lzlib* package should be available in almost every GNU/Linux or *BSD
 distribution. For example it is called /lzlib/ on Gentoo and Guix, and
