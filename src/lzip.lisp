@@ -182,32 +182,31 @@ threads, and write the result to the OUTPUT octet stream."
                       (write-sequence buffer pipe :end n)
                       (read-block (- size n) pipe nil)))))
                (compress-block (pipe)
-                 (unwind-protect
-                      (octet-streams:with-octet-output-stream (output)
-                        (compress-stream-1 pipe output
-                                           :level level
-                                           :member-size member-size
-                                           :dictionary-size dictionary-size
-                                           :match-len-limit match-len-limit))
-                   (close pipe)))
-               (add-task ()
-                 (let ((pipe (octet-streams:make-octet-pipe)))
+                 (list (octet-streams:with-octet-output-stream (output)
+                         (compress-stream-1 pipe output
+                                            :level level
+                                            :member-size member-size
+                                            :dictionary-size dictionary-size
+                                            :match-len-limit match-len-limit))
+                       pipe))
+               (add-task (pipe)
+                 (let ((pipe (or pipe (octet-streams:make-octet-pipe))))
                    (if (read-block block-size pipe t)
                        (let ((task (lparallel:future (compress-block pipe))))
                          (lparallel.queue:push-queue task queue))
                        (close pipe))))
                (process-queue ()
                  (unless (lparallel.queue:queue-empty-p queue)
-                   (let* ((task (lparallel.queue:pop-queue queue))
-                          (compressed-data (lparallel:force task)))
-                     (write-sequence compressed-data output))
-                   (add-task)
-                   (process-queue))))
+                   (destructuring-bind (compressed-data pipe)
+                       (lparallel:force (lparallel.queue:pop-queue queue))
+                     (write-sequence compressed-data output)
+                     (add-task pipe)
+                     (process-queue)))))
         (unwind-protect
              (lparallel:task-handler-bind ((error (lambda (e)
                                                     (error e))))
                (dotimes (i threads)
-                 (add-task))
+                 (add-task nil))
                (process-queue)
                t)
           (lparallel:end-kernel))))))
@@ -436,12 +435,11 @@ threads, and write the result to the OUTPUT octet stream."
              (read-data (start)
                (read-sequence buffer input :start start))
              (decompress-member (pipe)
-               (unwind-protect
-                    (octet-streams:with-octet-output-stream (output)
-                      (decompress-stream-1 pipe output
-                                           :ignore-trailing ignore-trailing
-                                           :loose-trailing loose-trailing))
-                 (close pipe)))
+               (list (octet-streams:with-octet-output-stream (output)
+                       (decompress-stream-1 pipe output
+                                            :ignore-trailing ignore-trailing
+                                            :loose-trailing loose-trailing))
+                     pipe))
              (read-member (member-size pipe)
                (setf end (read-data end))
                (let ((index (find-magic buffer 0 end)))
@@ -478,24 +476,24 @@ threads, and write the result to the OUTPUT octet stream."
                     t)
                    (t
                     (lz-error "Bad member in archive.")))))
-             (add-task ()
-               (let ((pipe (octet-streams:make-octet-pipe)))
+             (add-task (pipe)
+               (let ((pipe (or pipe (octet-streams:make-octet-pipe))))
                  (if (read-member 0 pipe)
                      (let ((task (lparallel:future (decompress-member pipe))))
                        (lparallel.queue:push-queue task queue))
                      (close pipe))))
              (process-queue ()
                (unless (lparallel.queue:queue-empty-p queue)
-                 (let* ((task (lparallel.queue:pop-queue queue))
-                        (data (lparallel:force task)))
-                   (write-sequence data output))
-                 (add-task)
-                 (process-queue))))
+                 (destructuring-bind (data pipe)
+                     (lparallel:force (lparallel.queue:pop-queue queue))
+                   (write-sequence data output)
+                   (add-task pipe)
+                   (process-queue)))))
       (unwind-protect
            (lparallel:task-handler-bind ((error (lambda (e)
                                                   (error e))))
              (dotimes (i threads)
-               (add-task))
+               (add-task nil))
              (process-queue)
              t)
         (lparallel:end-kernel)))))
