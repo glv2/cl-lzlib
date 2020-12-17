@@ -168,13 +168,14 @@ to the OUTPUT octet stream."
 threads, and write the result to the OUTPUT octet stream."
   (destructuring-bind (dictionary-size match-len-limit)
       (lzma-options level dictionary-size match-len-limit)
-    (let ((lparallel:*kernel* (lparallel:make-kernel threads))
-          (queue (lparallel.queue:make-queue))
-          (buffer (make-array +buffer-size+ :element-type 'u8))
-          (block-size (or block-size (* 2 dictionary-size))))
+    (let* ((lparallel:*kernel* (lparallel:make-kernel threads))
+           (queue (lparallel.queue:make-queue))
+           (buffer-size 1048576)
+           (buffer (make-array buffer-size :element-type 'u8))
+           (block-size (or block-size (* 2 dictionary-size))))
       (labels ((read-block (size pipe first-read-p)
                  (let ((n (read-sequence buffer input
-                                         :end (min size +buffer-size+))))
+                                         :end (min size buffer-size))))
                    (cond
                      ((zerop n)
                       (not first-read-p))
@@ -405,10 +406,11 @@ result to the OUTPUT octet stream."
                               (threads 2) (ignore-trailing t) loose-trailing)
   "Read the data from the INPUT octet stream, decompress it using multiple
 threads, and write the result to the OUTPUT octet stream."
-  (let ((lparallel:*kernel* (lparallel:make-kernel threads))
-        (queue (lparallel.queue:make-queue))
-        (buffer (make-array +buffer-size+ :element-type 'u8))
-        (input-pipe (octet-streams:make-octet-pipe)))
+  (let* ((lparallel:*kernel* (lparallel:make-kernel threads))
+         (queue (lparallel.queue:make-queue))
+         (buffer-size 1048576)
+         (buffer (make-array buffer-size :element-type 'u8))
+         (input-pipe (octet-streams:make-octet-pipe)))
     (labels ((find-magic (pipe)
                (let ((pattern (load-time-value
                                (make-array 4
@@ -451,7 +453,7 @@ threads, and write the result to the OUTPUT octet stream."
              (move-bytes (pipe n)
                (when (plusp n)
                  (let ((length (read-sequence buffer input-pipe
-                                              :end (min n +buffer-size+))))
+                                              :end (min n buffer-size))))
                    (write-sequence buffer pipe :end length)
                    (move-bytes pipe (- n length)))))
              (read-member (member-size pipe)
