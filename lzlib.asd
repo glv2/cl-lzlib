@@ -6,7 +6,7 @@
 (defsystem "lzlib"
   :name "lzlib"
   :description "lzip (LZMA) (de)compression using bindings to lzlib"
-  :version "1.0"
+  :version "1.1"
   :author "Guillaume LE VAILLANT"
   :license "GPL-3"
   :depends-on ("cffi" "cl-octet-streams" "lparallel")

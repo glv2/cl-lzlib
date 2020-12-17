@@ -1,12 +1,12 @@
 ;;; This file is part of cl-lzlib
-;;; Copyright 2019 Guillaume LE VAILLANT
+;;; Copyright 2019-2020 Guillaume LE VAILLANT
 ;;; Distributed under the GNU GPL v3 or later.
 ;;; See the file LICENSE for terms of use and distribution.
 
 (defsystem "lzlib-tests"
   :name "lzlib-tests"
   :description "Tests for lzlib"
-  :version "1.0"
+  :version "1.1"
   :author "Guillaume LE VAILLANT"
   :license "GPL-3"
   :depends-on ("cl-octet-streams" "fiveam" "lzlib" "uiop")
