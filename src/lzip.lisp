@@ -410,23 +410,11 @@ threads, and write the result to the OUTPUT octet stream."
          (queue (lparallel.queue:make-queue))
          (buffer-size 1048576)
          (buffer (make-array buffer-size :element-type 'u8))
-         (input-pipe (octet-streams:make-octet-pipe)))
+         (input-pipe (octet-streams:make-octet-pipe))
+         (magic (map '(simple-array (unsigned-byte 8) (*)) #'char-code "LZIP"))
+         (jump-table (octet-streams:make-jump-table magic)))
     (labels ((find-magic (pipe)
-               (let ((pattern (load-time-value
-                               (make-array 4
-                                           :element-type 'u8
-                                           :initial-contents '(76 90 73 80))
-                               t))
-                     (jump-table (load-time-value
-                                  (let ((tab (make-array 256
-                                                         :element-type 'u8
-                                                         :initial-element 4)))
-                                    (setf (aref tab 73) 1)
-                                    (setf (aref tab 76) 3)
-                                    (setf (aref tab 90) 2)
-                                    tab)
-                                  t)))
-                 (octet-streams:octet-stream-search pipe pattern jump-table)))
+               (octet-streams:octet-stream-search pipe magic jump-table))
              (read-member-size (pipe start)
                (logior (octet-streams:octet-stream-ref pipe start)
                        (ash (octet-streams:octet-stream-ref pipe (+ start 1))
