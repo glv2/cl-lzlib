@@ -89,6 +89,10 @@ The decompression can be customized using serveral parameters:
  - When an archive has some trailing data looking like a corrupt header, if
    /loose-trailing/ is ~nil~ an error will be generated, otherwise the trailing
    data will be ignored.
+ - When the /threads/ parameter is greater than 1, the library will decompress
+   the members of the archive in parallel. Note that if the archive only has
+   1 member, the decompression will be faster and use less memory when
+   /threads/ is also 1.
 
 #+BEGIN_SRC lisp
 (decompress-stream input output &key threads ignore-trailing loose-trailing) => t
