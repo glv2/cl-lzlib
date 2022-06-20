@@ -1,15 +1,13 @@
 ;;; This file is part of cl-lzlib
-;;; Copyright 2019-2020 Guillaume LE VAILLANT
+;;; Copyright 2019-2022 Guillaume LE VAILLANT
 ;;; Distributed under the GNU GPL v3 or later.
 ;;; See the file LICENSE for terms of use and distribution.
 
 (in-package :lzlib)
 
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (defconstant +buffer-size+ 65536))
-
 (deftype u8 () '(unsigned-byte 8))
+(defconstant +buffer-size+ 65536)
 
 
 ;;;
@@ -26,65 +24,79 @@
 
 
 ;;;
-;;; Compression functions
+;;; Compression Gray streams
 ;;;
 
-(defun compress (encoder input output member-size)
-  "Read the data from the INPUT octet stream, compress it with the ENCODER, and
-write the result to the OUTPUT octet stream."
-  (declare (type (unsigned-byte 63) member-size)
-           (optimize (speed 3) (space 0) (debug 0) (safety 1)))
-  (let ((buffer (cffi:make-shareable-byte-vector #.+buffer-size+)))
-    (declare (dynamic-extent buffer))
+(defclass compressing-stream (fundamental-binary-output-stream)
+  ((output-stream :accessor output-stream)
+   (encoder :accessor encoder)
+   (member-size :accessor member-size)
+   (buffer :accessor buffer)))
+
+(defmethod stream-element-type ((stream compressing-stream))
+  '(unsigned-byte 8))
+
+(defun compress-and-write (stream)
+  (with-slots (output-stream encoder buffer buffer-end) stream
     (cffi:with-pointer-to-vector-data (ffi-buffer buffer)
-      (labels ((write-to-compressor (processed)
-                 (declare (type i32 processed))
-                 (let ((size (min (lz-compress-write-size encoder)
-                                  +buffer-size+)))
-                   (declare (type (integer 0 #.+buffer-size+) size))
-                   (if (plusp size)
-                       (let ((n (read-sequence buffer input :end size)))
-                         (declare (type (integer 0 #.+buffer-size+) n))
-                         (cond
-                           ((and (plusp n)
-                                 (/= (lz-compress-write encoder ffi-buffer n) n))
-                            (lz-error "Library error (LZ-COMPRESS-WRITE)."))
-                           ((< n size)
-                            (lz-compress-finish encoder)
-                            (+ processed n))
-                           (t
-                            (write-to-compressor (+ processed n)))))
-                       processed)))
-               (read-from-compressor (processed)
-                 (declare (type i32 processed))
-                 (let ((n (lz-compress-read encoder ffi-buffer +buffer-size+)))
-                   (declare (type i32 n))
-                   (cond
-                     ((minusp n)
-                      (lz-error "LZ-COMPRESS-READ error: ~a."
-                                (lz-strerror (lz-compress-errno encoder))))
-                     ((plusp n)
-                      (write-sequence buffer output :end n)
-                      (read-from-compressor (+ processed n)))
-                     (t
-                      processed))))
-               (compress-data ()
-                 (let* ((in-size (write-to-compressor 0))
-                        (out-size (read-from-compressor 0)))
-                   (declare (type i32 in-size out-size))
-                   (cond
-                     ((and (zerop in-size) (zerop out-size))
-                      (lz-error "Library error (LZ-COMPRESS-READ)."))
-                     ((zerop (lz-compress-member-finished encoder))
-                      (compress-data))
-                     ((= (lz-compress-finished encoder) 1)
-                      t)
-                     ((minusp (lz-compress-restart-member encoder member-size))
-                      (lz-error "LZ-COMPRESS-RESTART-MEMBER error: ~a."
-                                (lz-strerror (lz-compress-errno encoder))))
-                     (t
-                      (compress-data))))))
-        (compress-data)))))
+      (do ((n (lz-compress-read encoder ffi-buffer +buffer-size+)
+              (lz-compress-read encoder ffi-buffer +buffer-size+)))
+          ((zerop n))
+        (if (minusp n)
+            (lz-error "LZ-COMPRESS-READ error: ~a."
+                      (lz-strerror (lz-compress-errno encoder)))
+            (write-sequence buffer output-stream :end n))))))
+
+(defmethod stream-write-byte ((stream compressing-stream) byte)
+  (with-slots (encoder member-size buffer) stream
+    (cffi:with-pointer-to-vector-data (ffi-buffer buffer)
+      (setf (aref buffer 0) byte)
+      (when (= (lz-compress-member-finished encoder) 1)
+        (when (minusp (lz-compress-restart-member encoder member-size))
+          (lz-error "LZ-COMPRESS-RESTART-MEMBER error: ~a."
+                    (lz-strerror (lz-compress-errno encoder)))))
+      (unless (= (lz-compress-write encoder ffi-buffer 1) 1)
+        (lz-error "Library error (LZ-COMPRESS-WRITE)."))))
+  (compress-and-write stream)
+  byte)
+
+(defmethod stream-write-sequence ((stream compressing-stream) seq start end
+                                  &key &allow-other-keys)
+  (with-slots (encoder member-size buffer) stream
+    (cffi:with-pointer-to-vector-data (ffi-buffer buffer)
+      (do ((n (min (lz-compress-write-size encoder)
+                   (- end start)
+                   +buffer-size+)
+              (min (lz-compress-write-size encoder)
+                   (- end start)
+                   +buffer-size+)))
+          ((zerop n))
+        (replace buffer seq :end1 n :start2 start)
+        (when (= (lz-compress-member-finished encoder) 1)
+          (when (minusp (lz-compress-restart-member encoder member-size))
+            (lz-error "LZ-COMPRESS-RESTART-MEMBER error: ~a."
+                      (lz-strerror (lz-compress-errno encoder)))))
+        (unless (= (lz-compress-write encoder ffi-buffer n) n)
+          (lz-error "Library error (LZ-COMPRESS-WRITE)."))
+        (incf start n)
+        (compress-and-write stream))))
+  start)
+
+(defmethod stream-finish-output ((stream compressing-stream))
+  (with-slots (output-stream encoder buffer) stream
+    (lz-compress-finish encoder)
+    (compress-and-write stream)
+    (finish-output output-stream))
+  nil)
+
+(defmethod close ((stream compressing-stream) &key &allow-other-keys)
+  (when (open-stream-p stream)
+    (finish-output stream)
+    (with-slots (encoder buffer) stream
+      (lz-compress-close encoder)
+      (setf encoder nil)
+      (setf buffer nil)))
+  t)
 
 (defun lzma-options (level dictionary-size match-len-limit)
   "Get the LZMA parameters matching the given arguments."
@@ -131,34 +143,235 @@ write the result to the OUTPUT octet stream."
     (t
      (lz-error "Either LEVEL or DICTIONARY-SIZE and MATCH-LEN-LIMIT must be set."))))
 
+(defun make-compressing-stream (output-stream
+                                &key
+                                  (level 6) (member-size 2251799813685248)
+                                  dictionary-size match-len-limit)
+  "Return a stream that will compress the bytes written to it at the given
+compression LEVEL and write them to the OUTPUT-STREAM."
+  (let ((stream (make-instance 'compressing-stream)))
+    (setf (output-stream stream) output-stream)
+    (unless (and (integerp member-size)
+                 (<= 100000 member-size 2251799813685248))
+      (lz-error "MEMBER-SIZE must be bewteen 100000 and 2251799813685248."))
+    (setf (member-size stream) member-size)
+    (with-slots (encoder member-size buffer) stream
+      (destructuring-bind (dictionary-size match-len-limit)
+          (lzma-options level dictionary-size match-len-limit)
+        (setf encoder (lz-compress-open dictionary-size
+                                        match-len-limit
+                                        member-size))
+        (case (if (cffi:null-pointer-p encoder)
+                  +lz-mem-error+
+                  (lz-compress-errno encoder))
+          ((#.+lz-ok+)
+           t)
+          ((#.+lz-mem-error+)
+           (lz-compress-close encoder)
+           (lz-error "Not enough memory. Try a smaller dictionary size."))
+          (t
+           (lz-compress-close encoder)
+           (lz-error "Invalid argument to encoder."))))
+      (setf buffer (cffi:make-shareable-byte-vector +buffer-size+)))
+    stream))
+
+(defmacro with-compressing-stream ((stream output-stream
+                                    &key
+                                      (level 6) (member-size 2251799813685248)
+                                      dictionary-size match-len-limit)
+                                   &body body)
+  "Within BODY, STREAM is bound to a compressing stream for the given
+compression LEVEL and OUTPUT-STREAM. The result of the last form of BODY is
+returned."
+  `(with-open-stream (,stream (make-compressing-stream
+                               ,output-stream
+                               :level ,level
+                               :member-size ,member-size
+                               :dictionary-size ,dictionary-size
+                               :match-len-limit ,match-len-limit))
+     ,@body))
+
+
+;;;
+;;; Decompression Gray streams
+;;;
+
+(defclass decompressing-stream (fundamental-binary-input-stream)
+  ((input-stream :accessor input-stream)
+   (decoder :accessor decoder)
+   (ignore-trailing :accessor ignore-trailing)
+   (loose-trailing :accessor loose-trailing)
+   (first-member :accessor first-member)
+   (buffer :accessor buffer)
+   (output :accessor output)
+   (output-index :accessor output-index)))
+
+(defmethod stream-element-type ((stream decompressing-stream))
+  '(unsigned-byte 8))
+
+(defun process-decompression-error (stream)
+  (with-slots (decoder first-member ignore-trailing loose-trailing) stream
+    (let ((member-pos (lz-decompress-member-position decoder))
+          (pos (lz-decompress-total-in-size decoder)))
+      (case (lz-decompress-errno decoder)
+        ((#.+lz-library-error+)
+         (lz-error "Library error (LZ-DECOMPRESS-READ)."))
+        ((#.+lz-header-error+)
+         (cond
+           (first-member
+            (lz-error "Bad magic number (file not in lzip format)."))
+           ((not ignore-trailing)
+            (lz-error "Trailing data not allowed."))
+           (t
+            t)))
+        ((#.+lz-mem-error+)
+         (lz-error "Not enough memory."))
+        ((#.+lz-unexpected-eof+)
+         (cond
+           ((> member-pos 6)
+            (lz-error "File ends unexpectedly at position ~d." pos))
+           (first-member
+            (lz-error "File ends unexpectedly at member header."))
+           (t
+            (lz-error "Truncated header in multimember file."))))
+        ((#.+lz-data-error+)
+         (cond
+           ((> member-pos 6)
+            (lz-error "Decoder error at position ~d." pos))
+           ((= member-pos 4)
+            (lz-error "Version ~d member format not supported."
+                      (lz-decompress-member-version decoder)))
+           ((= member-pos 5)
+            (lz-error "Invalid dictionary size in member header."))
+           (first-member
+            (lz-error "Bad version or dictionary size in member header."))
+           ((not loose-trailing)
+            (lz-error "Corrupt header in multimember file."))
+           ((not ignore-trailing)
+            (lz-error "Trailing data not allowed."))
+           (t
+            t)))
+        (t
+         (lz-error "Decoder error at position ~d." pos))))))
+
+(defun read-and-decompress (stream)
+  (with-slots (input-stream decoder first-member buffer output output-index)
+      stream
+    (cffi:with-pointer-to-vector-data (ffi-buffer buffer)
+      (let ((size (min (lz-decompress-write-size decoder) +buffer-size+)))
+        (when (plusp size)
+          (let ((n (read-sequence buffer input-stream :end size)))
+            (when (and (plusp n)
+                       (/= (lz-decompress-write decoder ffi-buffer n) n))
+              (lz-error "Library error (LZ-DECOMPRESS-WRITE)."))
+            (when (< n size)
+              (lz-decompress-finish decoder)))))
+
+      (let* ((size (- +buffer-size+ output-index))
+             (n (lz-decompress-read decoder ffi-buffer size)))
+        (unless (minusp n)
+          (setf first-member
+                (when first-member
+                  (zerop (lz-decompress-member-finished decoder))))
+          (replace output buffer :start1 output-index :end2 n)
+          (incf output-index n))
+        (when (or (minusp n) (and (zerop n) first-member))
+          (process-decompression-error stream))))
+    output-index))
+
+(defmethod stream-listen ((stream decompressing-stream))
+  (with-slots (input-stream output-index) stream
+    (or (plusp output-index)
+        (listen input-stream))))
+
+(defmethod stream-read-byte ((stream decompressing-stream))
+  (let ((available (read-and-decompress stream)))
+    (if (plusp available)
+        (with-slots (first-member output output-index) stream
+          (let ((byte (aref output 0)))
+            (replace output output :start2 1)
+            (decf output-index)
+            byte))
+        :eof)))
+
+(defmethod stream-read-sequence ((stream decompressing-stream) seq start end
+                                 &key &allow-other-keys)
+  (do ((available (read-and-decompress stream) (read-and-decompress stream)))
+      ((or (= start end) (zerop available)))
+    (with-slots (output output-index) stream
+      (let ((n (min (- end start) output-index)))
+        (replace seq output :start1 start :end2 n)
+        (incf start n)
+        (replace output output :start2 n)
+        (decf output-index n))))
+  start)
+
+(defmethod close ((stream decompressing-stream) &key &allow-other-keys)
+  (when (open-stream-p stream)
+    (with-slots (decoder buffer output output-index) stream
+      (lz-decompress-close decoder)
+      (setf decoder nil)
+      (setf buffer nil)
+      (setf output nil)
+      (setf output-index nil)))
+  t)
+
+(defun make-decompressing-stream (input-stream
+                                  &key (ignore-trailing t) loose-trailing)
+  "Return a stream that will supply the bytes resulting from the decompression
+of the data read from the INPUT-STREAM."
+  (let ((stream (make-instance 'decompressing-stream)))
+    (setf (input-stream stream) input-stream)
+    (setf (ignore-trailing stream) ignore-trailing)
+    (setf (loose-trailing stream) loose-trailing)
+    (with-slots (decoder first-member buffer output output-index)
+        stream
+      (setf decoder (lz-decompress-open))
+      (case (if (cffi:null-pointer-p decoder)
+                +lz-mem-error+
+                (lz-decompress-errno decoder))
+        ((#.+lz-ok+)
+         t)
+        (t
+         (lz-decompress-close decoder)
+         (lz-error "Not enough memory.")))
+      (setf first-member t)
+      (setf buffer (cffi:make-shareable-byte-vector +buffer-size+))
+      (setf output (make-array +buffer-size+ :element-type 'u8))
+      (setf output-index 0))
+    stream))
+
+(defmacro with-decompressing-stream ((stream input-stream
+                                      &key (ignore-trailing t) loose-trailing)
+                                     &body body)
+  "Within BODY, STREAM is bound to a decompressing stream for the given
+INPUT-STREAM. The result of the last form of BODY is returned."
+  `(with-open-stream (,stream (make-decompressing-stream
+                               ,input-stream
+                               :ignore-trailing ,ignore-trailing
+                               :loose-trailing ,loose-trailing))
+     ,@body))
+
+
+;;;
+;;; Compression functions
+;;;
+
 (defun compress-stream-1 (input output
                           &key
                             (level 6) (member-size 2251799813685248)
                             dictionary-size match-len-limit)
   "Read the data from the INPUT octet stream, compress it, and write the result
 to the OUTPUT octet stream."
-  (cond
-    ((not (and (integerp member-size)
-               (<= 100000 member-size 2251799813685248)))
-     (lz-error "MEMBER-SIZE must be bewteen 100000 and 2251799813685248."))
-    (t
-     (destructuring-bind (dictionary-size match-len-limit)
-         (lzma-options level dictionary-size match-len-limit)
-       (let* ((encoder (lz-compress-open dictionary-size
-                                         match-len-limit
-                                         member-size))
-              (errno (if (cffi:null-pointer-p encoder)
-                         +lz-mem-error+
-                         (lz-compress-errno encoder))))
-         (unwind-protect
-              (case errno
-                ((#.+lz-ok+)
-                 (compress encoder input output member-size))
-                ((#.+lz-mem-error+)
-                 (lz-error "Not enough memory. Try a smaller dictionary size."))
-                (t
-                 (lz-error "Invalid argument to encoder.")))
-           (lz-compress-close encoder)))))))
+  (with-compressing-stream (stream output
+                                   :level level
+                                   :member-size member-size
+                                   :dictionary-size dictionary-size
+                                   :match-len-limit match-len-limit)
+    (let ((buffer (make-array +buffer-size+ :element-type 'u8)))
+      (do ((n (read-sequence buffer input) (read-sequence buffer input)))
+          ((zerop n) t)
+        (write-sequence buffer stream :end n)))))
 
 (defun compress-stream-n (input output
                           &key
@@ -276,130 +489,18 @@ and return the resulting octet vector."
 ;;; Decompression functions
 ;;;
 
-(defun decompress (decoder input output ignore-trailing loose-trailing)
-  "Read the data from the INPUT octet stream, decompress it with the DECODER,
-and write the result to the OUTPUT octet stream."
-  (declare (optimize (speed 3) (space 0) (debug 0) (safety 1)))
-  (let ((buffer (cffi:make-shareable-byte-vector #.+buffer-size+)))
-    (declare (dynamic-extent buffer))
-    (cffi:with-pointer-to-vector-data (ffi-buffer buffer)
-      (labels ((write-to-decompressor (processed)
-                 (declare (type i32 processed))
-                 (let ((size (min (lz-decompress-write-size decoder)
-                                  +buffer-size+)))
-                   (declare (type i32 size))
-                   (if (plusp size)
-                       (let ((n (read-sequence buffer input :end size)))
-                         (declare (type (integer 0 #.+buffer-size+) n))
-                         (cond
-                           ((and (plusp n)
-                                 (/= (lz-decompress-write decoder ffi-buffer n) n))
-                            (lz-error "Library error (LZ-DECOMPRESS-WRITE)."))
-                           ((< n size)
-                            (lz-decompress-finish decoder)
-                            (+ processed n))
-                           (t
-                            (write-to-decompressor (+ processed n)))))
-                       processed)))
-               (read-from-decompressor (processed first-member-p)
-                 (declare (type i32 processed)
-                          (type boolean first-member-p))
-                 (let ((n (lz-decompress-read decoder ffi-buffer +buffer-size+)))
-                   (declare (type i32 n))
-                   (if (minusp n)
-                       (values n first-member-p)
-                       (let ((first-member-p
-                               (when first-member-p
-                                 (zerop (lz-decompress-member-finished decoder)))))
-                         (declare (type boolean first-member-p))
-                         (cond
-                           ((plusp n)
-                            (write-sequence buffer output :end n)
-                            (read-from-decompressor (+ processed n)
-                                                    first-member-p))
-                           (t
-                            (values processed first-member-p)))))))
-               (process-error (first-member-p)
-                 (declare (type boolean first-member-p))
-                 (let ((member-pos (lz-decompress-member-position decoder))
-                       (pos (lz-decompress-total-in-size decoder)))
-                   (declare (type u64 member-pos pos))
-                   (case (lz-decompress-errno decoder)
-                     ((#.+lz-library-error+)
-                      (lz-error "Library error (LZ-DECOMPRESS-READ)."))
-                     ((#.+lz-header-error+)
-                      (cond
-                        (first-member-p
-                         (lz-error "Bad magic number (file not in lzip format)."))
-                        ((not ignore-trailing)
-                         (lz-error "Trailing data not allowed."))
-                        (t
-                         t)))
-                     ((#.+lz-mem-error+)
-                      (lz-error "Not enough memory."))
-                     ((#.+lz-unexpected-eof+)
-                      (cond
-                        ((> member-pos 6)
-                         (lz-error "File ends unexpectedly at position ~d." pos))
-                        (first-member-p
-                         (lz-error "File ends unexpectedly at member header."))
-                        (t
-                         (lz-error "Truncated header in multimember file."))))
-                     ((#.+lz-data-error+)
-                      (cond
-                        ((> member-pos 6)
-                         (lz-error "Decoder error at position ~d." pos))
-                        ((= member-pos 4)
-                         (lz-error "Version ~d member format not supported."
-                                   (lz-decompress-member-version decoder)))
-                        ((= member-pos 5)
-                         (lz-error "Invalid dictionary size in member header."))
-                        (first-member-p
-                         (lz-error "Bad version or dictionary size in member header."))
-                        ((not loose-trailing)
-                         (lz-error "Corrupt header in multimember file."))
-                        ((not ignore-trailing)
-                         (lz-error "Trailing data not allowed."))
-                        (t
-                         t)))
-                     (t
-                      (lz-error "Decoder error at position ~d." pos)))))
-               (decompress-data (first-member-p)
-                 (declare (type boolean first-member-p))
-                 (let ((in-size (write-to-decompressor 0)))
-                   (declare (type i32 in-size))
-                   (multiple-value-bind (out-size first-member-p)
-                       (read-from-decompressor 0 first-member-p)
-                     (declare (type i32 out-size)
-                              (type boolean first-member-p))
-                     (cond
-                       ((or (minusp out-size)
-                            (and (zerop out-size) first-member-p))
-                        (process-error first-member-p))
-                       ((= (lz-decompress-finished decoder) 1)
-                        t)
-                       ((and (zerop in-size) (zerop out-size))
-                        (lz-error "Library error (stalled)."))
-                       (t
-                        (decompress-data first-member-p)))))))
-        (decompress-data t)))))
-
 (defun decompress-stream-1 (input output
                             &key
-                              (ignore-trailing t) loose-trailing)
+                             (ignore-trailing t) loose-trailing)
   "Read the data from the INPUT octet stream, decompress it, and write the
 result to the OUTPUT octet stream."
-  (let* ((decoder (lz-decompress-open))
-         (errno (if (cffi:null-pointer-p decoder)
-                    +lz-mem-error+
-                    (lz-decompress-errno decoder))))
-    (unwind-protect
-         (case errno
-           ((#.+lz-ok+)
-            (decompress decoder input output ignore-trailing loose-trailing))
-           (t
-            (lz-error "Not enough memory.")))
-      (lz-decompress-close decoder))))
+  (with-decompressing-stream (stream input
+                                     :ignore-trailing ignore-trailing
+                                     :loose-trailing loose-trailing)
+    (let ((buffer (make-array +buffer-size+ :element-type 'u8)))
+      (do ((n (read-sequence buffer stream) (read-sequence buffer stream)))
+          ((zerop n) t)
+        (write-sequence buffer output :end n)))))
 
 (defun decompress-stream-n (input output
                             &key
