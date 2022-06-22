@@ -287,9 +287,9 @@ returned."
 (defmethod stream-read-byte ((stream decompressing-stream))
   (let ((available (read-and-decompress stream)))
     (if (plusp available)
-        (with-slots (first-member output output-index) stream
+        (with-slots (output output-index) stream
           (let ((byte (aref output 0)))
-            (replace output output :start2 1)
+            (replace output output :start2 1 :end2 output-index)
             (decf output-index)
             byte))
         :eof)))
@@ -302,7 +302,7 @@ returned."
       (let ((n (min (- end start) output-index)))
         (replace seq output :start1 start :end2 n)
         (incf start n)
-        (replace output output :start2 n)
+        (replace output output :start2 n :end2 output-index)
         (decf output-index n))))
   start)
 
