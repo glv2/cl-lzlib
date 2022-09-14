@@ -269,13 +269,13 @@ returned."
 
       (let* ((size (- +buffer-size+ output-index))
              (n (lz-decompress-read decoder ffi-buffer size)))
-        (unless (minusp n)
+        (unless (or (minusp n) (and (zerop n) first-member))
           (setf first-member
                 (when first-member
                   (zerop (lz-decompress-member-finished decoder))))
           (replace output buffer :start1 output-index :end2 n)
           (incf output-index n))
-        (when (or (minusp n) (and (zerop n) first-member))
+        (when (minusp n)
           (process-decompression-error stream))))
     output-index))
 
