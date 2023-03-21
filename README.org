@@ -6,6 +6,8 @@
 #+OPTIONS: num:nil toc:nil html-postamble:nil html-scripts:nil
 #+HTML_DOCTYPE: html5
 
+The active repository is at https://codeberg.org/glv/cl-lzlib
+
 * Description
 
 *cl-lzlib* is a Common Lisp library for lzip (LZMA) compression/decompression
@@ -20,7 +22,7 @@ for details.
 
 *cl-lzlib* requires:
  - [[https://cffi.common-lisp.dev/][cffi]]
- - [[https://github.com/glv2/cl-octet-streams][cl-octet-streams]]
+ - [[https://codeberg.org/glv/cl-octet-streams][cl-octet-streams]]
  - [[https://lparallel.org/][lparallel]]
  - [[https://www.nongnu.org/lzip/lzlib.html][lzlib]]
  - [[https://trivial-gray-streams.common-lisp.dev/][trivial-gray-streams]]
